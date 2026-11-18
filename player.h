@@ -16,13 +16,7 @@ typedef struct {
 extern const int worldMap[MAP_HEIGHT][MAP_WIDTH];
 
 void initPlayer(Player *player);
-void updatePlayer(
-    Player *player,
-    const int map[MAP_HEIGHT][MAP_WIDTH],
-    double forward,
-    double strafe,
-    double turn,
-    double deltaTime
-);
+
+void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double forward, double strafe, double turn, double mouseDeltaX, double deltaTime);
 
 #endif

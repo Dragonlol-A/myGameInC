@@ -4,7 +4,10 @@
 #include "ScreenUpdate.h"
 #include "player.h"
 
-int main(void) {
+int main(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
         return 1;
@@ -50,12 +53,17 @@ int main(void) {
     bool running = true;
     Uint64 previousCounter = SDL_GetPerformanceCounter();
     const double counterFrequency = (double)SDL_GetPerformanceFrequency();
-
+    //set the mouse to relative mode to capture mouse movement (hide the cursor and get relative motion)
+    SDL_SetRelativeMouseMode(SDL_TRUE);
     while (running) {
         SDL_Event event;
+        int mouseDeltaX = 0;
+
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 running = false;
+            } else if (event.type == SDL_MOUSEMOTION) {
+                mouseDeltaX += event.motion.xrel;
             }
         }
 
@@ -67,12 +75,8 @@ int main(void) {
         double forward = (keys[SDL_SCANCODE_Z] || keys[SDL_SCANCODE_UP] ? 1.0 : 0.0) - (keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN] ? 1.0 : 0.0);
         double strafe = (keys[SDL_SCANCODE_D] ? 1.0 : 0.0) - (keys[SDL_SCANCODE_Q] ? 1.0 : 0.0);
         double turn = (keys[SDL_SCANCODE_RIGHT] ? 1.0 : 0.0) - (keys[SDL_SCANCODE_LEFT] ? 1.0 : 0.0);
-        
-        if (keys[SDL_SCANCODE_ESCAPE]) if (openMenu(renderer) == 1) {
-            running = false;
-        }
 
-        updatePlayer(&player, worldMap, forward, strafe, turn, deltaTime);
+        updatePlayer(&player, worldMap, forward, strafe, turn , mouseDeltaX , deltaTime);
         renderScene(renderer, &player,wallTexture, textureWidth, textureHeight, worldMap);
         SDL_RenderPresent(renderer);
     }

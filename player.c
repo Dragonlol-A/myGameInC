@@ -29,11 +29,12 @@ void initPlayer(Player *player) {
     player->planeY = 0.66;
 }
 
-void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double forward, double strafe, double turn, double deltaTime) {
+void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double forward, double strafe, double turn, double mouseDeltaX, double deltaTime) {
     const double moveSpeed = 3.0;
     const double rotationSpeed = 2.0;
+    const double mouseSensitivity = 0.003;
 
-    double rotation = turn * rotationSpeed * deltaTime;
+    double rotation = turn * rotationSpeed * deltaTime - mouseDeltaX * mouseSensitivity;
     double cosRotation = cos(rotation);
     double sinRotation = sin(rotation);
     double oldDirX = player->dirX;

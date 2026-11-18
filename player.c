@@ -1,30 +1,62 @@
-#include <stdio.h>
-#include <SDL2/SDL.h>
-#include "ScreenUpdate.h"
+#include <stdbool.h>
+#include <math.h>
 #include "player.h"
 
-Player *initPlayer(SDL_Renderer *renderer, SDL_Window *window, const char *imagePath, int width, int height) {
-    Player *player = malloc(sizeof(Player));
-    if( player == NULL) {
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        fprintf(stderr, "Error while allocating player: %s\n", SDL_GetError());
-        SDL_Quit();
-        return NULL;
+static bool isWall(const int map[MAP_HEIGHT][MAP_WIDTH], double x, double y) {
+    int mapX = (int)floor(x);
+    int mapY = (int)floor(y);
+
+    if (mapX < 0 || mapX >= MAP_WIDTH || mapY < 0 || mapY >= MAP_HEIGHT) {
+        return true;
     }
-    player->x = 0;
-    player->y = 0;
-    player->width = width;
-    player->height = height;
-    player->texture = generateTexture(renderer, imagePath, width, height);
-    if (player->texture == NULL) {
-        free(player);
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        fprintf(stderr, "Error while generating player texture: %s\n", SDL_GetError());
-        SDL_Quit();
-        return NULL;
+    return map[mapY][mapX] != 0;
+}
+
+static bool canOccupy(const int map[MAP_HEIGHT][MAP_WIDTH], double x, double y) {
+    const double radius = 0.2;
+    return !isWall(map, x - radius, y - radius)
+        && !isWall(map, x + radius, y - radius)
+        && !isWall(map, x - radius, y + radius)
+        && !isWall(map, x + radius, y + radius);
+}
+
+void initPlayer(Player *player) {
+    player->x = 2.5;
+    player->y = 2.5;
+    player->dirX = 1.0;
+    player->dirY = 0.0;
+    player->planeX = 0.0;
+    player->planeY = 0.66;
+}
+
+void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double forward, double strafe, double turn, double deltaTime) {
+    const double moveSpeed = 3.0;
+    const double rotationSpeed = 2.0;
+
+    double rotation = turn * rotationSpeed * deltaTime;
+    double cosRotation = cos(rotation);
+    double sinRotation = sin(rotation);
+    double oldDirX = player->dirX;
+    double oldPlaneX = player->planeX;
+
+    player->dirX = player->dirX * cosRotation - player->dirY * sinRotation;
+    player->dirY = oldDirX * sinRotation + player->dirY * cosRotation;
+    player->planeX = player->planeX * cosRotation - player->planeY * sinRotation;
+    player->planeY = oldPlaneX * sinRotation + player->planeY * cosRotation;
+
+    double inputLength = sqrt(forward * forward + strafe * strafe);
+    if (inputLength > 1.0) {
+        forward /= inputLength;
+        strafe /= inputLength;
     }
 
-    return player;
+    double moveX = (player->dirX * forward - player->dirY * strafe) * moveSpeed * deltaTime;
+    double moveY = (player->dirY * forward + player->dirX * strafe) * moveSpeed * deltaTime;
+
+    if (canOccupy(map, player->x + moveX, player->y)) {
+        player->x += moveX;
+    }
+    if (canOccupy(map, player->x, player->y + moveY)) {
+        player->y += moveY;
+    }
 }

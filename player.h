@@ -1,16 +1,28 @@
 #ifndef PLAYER_H
 #define PLAYER_H
-#include <SDL2/SDL.h>
-#include <stdio.h>
+
+#define MAP_WIDTH 12
+#define MAP_HEIGHT 12
 
 typedef struct {
-    int x;
-    int y;
-    int width;
-    int height;
-    SDL_Texture *texture;
+    double x;
+    double y;
+    double dirX;
+    double dirY;
+    double planeX;
+    double planeY;
 } Player;
 
-Player *initPlayer(SDL_Renderer *renderer, SDL_Window *window, const char *imagePath, int width, int height);
+extern const int worldMap[MAP_HEIGHT][MAP_WIDTH];
 
-#endif 
+void initPlayer(Player *player);
+void updatePlayer(
+    Player *player,
+    const int map[MAP_HEIGHT][MAP_WIDTH],
+    double forward,
+    double strafe,
+    double turn,
+    double deltaTime
+);
+
+#endif

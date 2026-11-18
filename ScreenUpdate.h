@@ -1,18 +1,16 @@
+#ifndef SCREEN_UPDATE_H
+#define SCREEN_UPDATE_H
+
 #include <SDL2/SDL.h>
-#include <stdio.h>
 #include "player.h"
 
-#define TEXTURE_WIDTH 64
-#define TEXTURE_HEIGHT 64
+#define SCREEN_WIDTH 1920
+#define SCREEN_HEIGHT 1080
 
-typedef struct {
-    Uint8 r;
-    Uint8 g;
-    Uint8 b;
-} Color;
+void renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wallTexture, int textureWidth, int textureHeight, const int map[MAP_HEIGHT][MAP_WIDTH]);
 
-void changeColor(Color *c, int r, int g, int b); // change the color displayed at the screen
+SDL_Texture *loadTextures(SDL_Renderer *renderer);
 
-SDL_Texture *generateTexture(SDL_Renderer *renderer, const char *imagePath, int width, int height); // generate a texture with the specified color
+int openMenu(SDL_Renderer *renderer);
 
-void  movePlayerTexture(SDL_Renderer *renderer, Player *player); // move the player texture to a new position
+#endif

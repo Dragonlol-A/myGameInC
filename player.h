@@ -1,6 +1,8 @@
 #ifndef PLAYER_H
 #define PLAYER_H
 
+#include <stdbool.h>
+
 #define MAP_WIDTH 12
 #define MAP_HEIGHT 12
 
@@ -14,6 +16,8 @@ typedef struct {
 } Player;
 
 extern const int worldMap[MAP_HEIGHT][MAP_WIDTH];
+
+bool canOccupyMap(const int map[MAP_HEIGHT][MAP_WIDTH], double x, double y, double radius);
 
 void initPlayer(Player *player);
 

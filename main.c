@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include "ScreenUpdate.h"
 #include "player.h"
+#include "enemy.h"
 
 int main(int argc, char *argv[]) {
     (void)argc;
@@ -30,17 +31,20 @@ int main(int argc, char *argv[]) {
 
     int textureWidth;
     int textureHeight;
-    SDL_Texture *wallTexture = loadTextures(renderer);
-    if (wallTexture == NULL) {
+    SDL_Texture *defaultWallTexture = loadTextures(renderer, "assets/wall.png");
+    SDL_Texture *theBestWallTexture = loadTextures(renderer, "assets/theBestWall.png");
+    SDL_Texture *enemyTexture = loadTextures(renderer, "assets/grinch.png");
+    if (defaultWallTexture == NULL || theBestWallTexture == NULL || enemyTexture == NULL) {
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return 1;
     }
 
-    if (SDL_QueryTexture(wallTexture, NULL, NULL, &textureWidth, &textureHeight) != 0) {
+    if (SDL_QueryTexture(defaultWallTexture, NULL, NULL, &textureWidth, &textureHeight) != 0) {
         fprintf(stderr, "SDL_QueryTexture Error: %s\n", SDL_GetError());
-        SDL_DestroyTexture(wallTexture);
+        SDL_DestroyTexture(defaultWallTexture);
+        SDL_DestroyTexture(theBestWallTexture);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -49,6 +53,15 @@ int main(int argc, char *argv[]) {
 
     Player player;
     initPlayer(&player);
+
+    int enemyWidth, enemyHeight;
+    if (SDL_QueryTexture(enemyTexture, NULL, NULL, &enemyWidth, &enemyHeight) != 0) {
+        fprintf(stderr, "SDL_QueryTexture enemy Error: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    Enemy enemy;
+    initEnemy(&enemy, DEFALT_ENEMY_POS_X, DEFALT_ENEMY_POS_Y, enemyTexture, enemyWidth, enemyHeight);
 
     bool running = true;
     Uint64 previousCounter = SDL_GetPerformanceCounter();
@@ -77,11 +90,14 @@ int main(int argc, char *argv[]) {
         double turn = (keys[SDL_SCANCODE_RIGHT] ? 1.0 : 0.0) - (keys[SDL_SCANCODE_LEFT] ? 1.0 : 0.0);
 
         updatePlayer(&player, worldMap, forward, strafe, turn , mouseDeltaX , deltaTime);
-        renderScene(renderer, &player,wallTexture, textureWidth, textureHeight, worldMap);
+        updateEnemy(&enemy, &player, worldMap, deltaTime);
+        renderScene(renderer, &player,defaultWallTexture, theBestWallTexture, &enemy, textureWidth, textureHeight, worldMap);
         SDL_RenderPresent(renderer);
     }
 
-    SDL_DestroyTexture(wallTexture);
+    SDL_DestroyTexture(defaultWallTexture);
+    SDL_DestroyTexture(theBestWallTexture);
+    SDL_DestroyTexture(enemy.texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();

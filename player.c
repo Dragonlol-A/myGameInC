@@ -12,8 +12,7 @@ static bool isWall(const int map[MAP_HEIGHT][MAP_WIDTH], double x, double y) {
     return map[mapY][mapX] != 0;
 }
 
-static bool canOccupy(const int map[MAP_HEIGHT][MAP_WIDTH], double x, double y) {
-    const double radius = 0.2;
+bool canOccupyMap(const int map[MAP_HEIGHT][MAP_WIDTH], double x, double y, double radius) {
     return !isWall(map, x - radius, y - radius)
         && !isWall(map, x + radius, y - radius)
         && !isWall(map, x - radius, y + radius)
@@ -54,10 +53,10 @@ void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double f
     double moveX = (player->dirX * forward - player->dirY * strafe) * moveSpeed * deltaTime;
     double moveY = (player->dirY * forward + player->dirX * strafe) * moveSpeed * deltaTime;
 
-    if (canOccupy(map, player->x + moveX, player->y)) {
+    if (canOccupyMap(map, player->x + moveX, player->y, 0.2)) {
         player->x += moveX;
     }
-    if (canOccupy(map, player->x, player->y + moveY)) {
+    if (canOccupyMap(map, player->x, player->y + moveY, 0.2)) {
         player->y += moveY;
     }
 }

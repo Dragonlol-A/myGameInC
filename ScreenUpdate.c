@@ -7,7 +7,7 @@
 const int worldMap[MAP_HEIGHT][MAP_WIDTH] = {
     {1,1,1,1,1,1,1,1,1,1,1,1},
     {1,0,0,0,0,0,0,0,0,0,0,1},
-    {1,0,0,0,1,1,0,0,1,0,0,1},
+    {1,0,0,0,1,2,0,0,1,0,0,1},
     {1,0,0,0,1,0,0,0,1,0,0,1},
     {1,0,0,0,1,0,0,0,0,0,0,1},
     {1,0,0,0,0,0,1,1,0,0,0,1},
@@ -23,8 +23,8 @@ static void setDrawColor(SDL_Renderer *renderer, Uint8 red, Uint8 green, Uint8 b
     SDL_SetRenderDrawColor(renderer, red, green, blue, 255);
 }
 
-SDL_Texture *loadTextures(SDL_Renderer *renderer) {
-    SDL_Surface *surface = IMG_Load("assets/wall.png");
+SDL_Texture *loadTextures(SDL_Renderer *renderer, const char *texturePath) {
+    SDL_Surface *surface = IMG_Load(texturePath);
 
     if (surface == NULL) {
         fprintf(stderr, "IMG_Load Error: %s\n", IMG_GetError());
@@ -41,7 +41,7 @@ SDL_Texture *loadTextures(SDL_Renderer *renderer) {
     return wallTexture;
 }
 
-void renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wallTexture, int textureWidth, int textureHeight, const int map[MAP_HEIGHT][MAP_WIDTH]) {
+void renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wallTexture, SDL_Texture *theBestWallTexture, const Enemy *enemy, int textureWidth, int textureHeight, const int map[MAP_HEIGHT][MAP_WIDTH]) {
 
     setDrawColor(renderer, 42, 48, 68);
     SDL_Rect ceiling = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2};
@@ -51,7 +51,10 @@ void renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wall
     SDL_Rect floorRect = {0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT / 2};
     SDL_RenderFillRect(renderer, &floorRect);
 
+    double zBuffer[SCREEN_WIDTH];
+
     for (int x = 0; x < SCREEN_WIDTH; x++) {
+        zBuffer[x] = INFINITY;
         double cameraX = 2.0 * x / SCREEN_WIDTH - 1.0;
         double rayDirX = player->dirX + player->planeX * cameraX;
         double rayDirY = player->dirY + player->planeY * cameraX;
@@ -112,6 +115,8 @@ void renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wall
             perpendicularDistance = 0.1;
         }
 
+        zBuffer[x] = perpendicularDistance;
+
         double wallX;
         if (side == 0) {
             wallX = player->y + perpendicularDistance * rayDirY;
@@ -121,9 +126,10 @@ void renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wall
         wallX -= floor(wallX);
 
         int textureX = (int)(wallX * textureWidth);
-
-        if ((side == 0 && rayDirX > 0) || (side == 1 && rayDirY < 0)) {
-            textureX = textureWidth - textureX - 1;
+        if (textureX < 0) {
+            textureX = 0;
+        } else if (textureX >= textureWidth) {
+            textureX = textureWidth - 1;
         }
 
         int lineHeight = (int)(SCREEN_HEIGHT / perpendicularDistance);
@@ -158,11 +164,60 @@ void renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wall
             brightness *= 0.72;
         }
 
-        SDL_SetTextureColorMod(wallTexture, shade, shade, shade);
-        SDL_Rect source = {textureX, sourceStart, 1, sourceEnd - sourceStart};
-        SDL_Rect destination = {x, drawStart, 1, drawEnd - drawStart};
-        SDL_RenderCopy(renderer, wallTexture, &source, &destination);
+        if (map[mapY][mapX] == 1) {
+            SDL_SetTextureColorMod(wallTexture, shade, shade, shade);
+            SDL_Rect source = {textureX, sourceStart, 1, sourceEnd - sourceStart};
+            SDL_Rect destination = {x, drawStart, 1, drawEnd - drawStart};
+            SDL_RenderCopy(renderer, wallTexture, &source, &destination);
+        }
+        if(map[mapY][mapX] == 2) {
+            SDL_SetTextureColorMod(theBestWallTexture, shade, shade, shade);
+            SDL_Rect source = {textureX, sourceStart, 1, sourceEnd - sourceStart};
+            SDL_Rect destination = {x, drawStart, 1, drawEnd - drawStart};
+            SDL_RenderCopy(renderer, theBestWallTexture, &source, &destination);
+        }
     }
+    double relativeX = enemy->x - player->x;
+double relativeY = enemy->y - player->y;
+
+double determinant =
+    player->planeX * player->dirY - player->dirX * player->planeY;
+double inverseDeterminant = 1.0 / determinant;
+
+double transformX = inverseDeterminant *
+    (player->dirY * relativeX - player->dirX * relativeY);
+double transformY = inverseDeterminant *
+    (-player->planeY * relativeX + player->planeX * relativeY);
+
+if (transformY > 0.1) {
+    int screenX = (int)((SCREEN_WIDTH / 2.0) *
+        (1.0 + transformX / transformY));
+    double spriteDistance = hypot(relativeX, relativeY);
+    int spriteHeight = (int)(SCREEN_HEIGHT / spriteDistance);
+    int spriteWidth = (int)(spriteHeight * (double)enemy->textureWidth / enemy->textureHeight);
+
+    int spriteLeft = screenX - spriteWidth / 2;
+    int spriteTop = SCREEN_HEIGHT / 2 - spriteHeight / 2;
+
+    int firstX = spriteLeft < 0 ? 0 : spriteLeft;
+    int endX = spriteLeft + spriteWidth;
+    if (endX > SCREEN_WIDTH) {
+        endX = SCREEN_WIDTH;
+    }
+
+    SDL_SetTextureBlendMode(enemy->texture, SDL_BLENDMODE_BLEND);
+
+    for (int stripeX = firstX; stripeX < endX; stripeX++) {
+        if (transformY < zBuffer[stripeX]) {
+            int sourceX = (int)((stripeX - spriteLeft) *
+                (double)enemy->textureWidth / spriteWidth);
+
+            SDL_Rect source = {sourceX, 0, 1, enemy->textureHeight};
+            SDL_Rect destination = {stripeX, spriteTop, 1, spriteHeight};
+            SDL_RenderCopy(renderer, enemy->texture, &source, &destination);
+        }
+    }
+}
 
     SDL_SetTextureColorMod(wallTexture, 255, 255, 255);
 }

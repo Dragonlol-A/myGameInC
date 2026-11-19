@@ -13,6 +13,7 @@ typedef struct {
     double dirY;
     double planeX;
     double planeY;
+    double planyZ;
 } Player;
 
 extern const int worldMap[MAP_HEIGHT][MAP_WIDTH];
@@ -23,6 +24,6 @@ void initPlayer(Player *player);
 
 void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double forward, double strafe, double turn, double mouseDeltaX, double deltaTime);
 
-void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture *woodenMacheteTexture, SDL_Renderer *renderer, double deltaTime);
+void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture *woodenMacheteTexture, SDL_Renderer *renderer, int renderWidth, int renderHeight, double deltaTime);
 
 #endif

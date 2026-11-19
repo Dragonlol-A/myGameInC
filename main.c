@@ -10,12 +10,16 @@ int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
 
+    #ifdef _WIN32
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2"); //to avoid windows upscaling (mise à l'échelle)
+    #endif
+
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
         return 1;
     }
 
-    SDL_Window *window = SDL_CreateWindow("Raycasting Demo", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN );
+    SDL_Window *window = SDL_CreateWindow("Raycasting Demo", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL) {
         fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
         SDL_Quit();
@@ -36,14 +40,14 @@ int main(int argc, char *argv[]) {
     SDL_Texture *theBestWallTexture = loadTextures(renderer, "assets/theBestWall.png");
     SDL_Texture *enemyTexture = loadTextures(renderer, "assets/grinch.png");
     SDL_Texture *woodenMacheteTexture = loadTextures(renderer, "assets/wood_machete.png");
-    if (defaultWallTexture == NULL || theBestWallTexture == NULL || enemyTexture == NULL || woodenMacheteTexture == NULL) {
+    SDL_Texture *settingsButtonTexture = loadTextures(renderer, "assets/SettingsButton.png");
+    if (defaultWallTexture == NULL || theBestWallTexture == NULL || enemyTexture == NULL || woodenMacheteTexture == NULL || settingsButtonTexture == NULL) {
+        fprintf(stderr, "Failed to load one or more textures.\n");
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return 1;
     }
-    
-
     
     SDL_SetTextureBlendMode(woodenMacheteTexture, SDL_BLENDMODE_BLEND);
 
@@ -56,6 +60,7 @@ int main(int argc, char *argv[]) {
         SDL_DestroyTexture(theBestWallTexture);
         SDL_DestroyTexture(enemyTexture);
         SDL_DestroyTexture(woodenMacheteTexture);
+        SDL_DestroyTexture(settingsButtonTexture);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -75,6 +80,9 @@ int main(int argc, char *argv[]) {
     initEnemy(&enemy, DEFALT_ENEMY_POS_X, DEFALT_ENEMY_POS_Y, enemyTexture, enemyWidth, enemyHeight);
 
     bool running = true;
+    SDL_Texture *sceneTexture = NULL;
+    int sceneTextureWidth = 0;
+    int sceneTextureHeight = 0;
     Uint64 previousCounter = SDL_GetPerformanceCounter();
     const double counterFrequency = (double)SDL_GetPerformanceFrequency();
     //set the mouse to relative mode to capture mouse movement (hide the cursor and get relative motion)
@@ -87,7 +95,7 @@ int main(int argc, char *argv[]) {
             if (event.type == SDL_QUIT) {
                 running = false;
             } else if (event.type == SDL_MOUSEMOTION) {
-                mouseDeltaX += event.motion.xrel;
+                mouseDeltaX -= event.motion.xrel;
             }
         }
 
@@ -99,17 +107,73 @@ int main(int argc, char *argv[]) {
         double forward = (keys[SDL_SCANCODE_Z] || keys[SDL_SCANCODE_UP] ? 1.0 : 0.0) - (keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN] ? 1.0 : 0.0);
         double strafe = (keys[SDL_SCANCODE_D] ? 1.0 : 0.0) - (keys[SDL_SCANCODE_Q] ? 1.0 : 0.0);
         double turn = (keys[SDL_SCANCODE_RIGHT] ? 1.0 : 0.0) - (keys[SDL_SCANCODE_LEFT] ? 1.0 : 0.0);
+
+        if(keys[SDL_SCANCODE_ESCAPE]){
+            if (openMenu(renderer, window, settingsButtonTexture) == 1) running = false;
+            previousCounter = SDL_GetPerformanceCounter();
+        }
+        if (!running) break;
+
+        int renderWidth;
+        int renderHeight;
+        getRenderResolution(&renderWidth, &renderHeight);
+        if (sceneTexture == NULL || renderWidth != sceneTextureWidth || renderHeight != sceneTextureHeight) {
+            SDL_Texture *newSceneTexture = SDL_CreateTexture(
+                renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
+                renderWidth, renderHeight);
+            if (newSceneTexture == NULL) {
+                fprintf(stderr, "SDL_CreateTexture render target Error: %s\n", SDL_GetError());
+                running = false;
+                break;
+            }
+            if (SDL_SetTextureBlendMode(newSceneTexture, SDL_BLENDMODE_NONE) != 0) {
+                fprintf(stderr, "SDL_SetTextureBlendMode render target Error: %s\n", SDL_GetError());
+                SDL_DestroyTexture(newSceneTexture);
+                running = false;
+                break;
+            }
+            if (sceneTexture != NULL) {
+                SDL_DestroyTexture(sceneTexture);
+            }
+            sceneTexture = newSceneTexture;
+            sceneTextureWidth = renderWidth;
+            sceneTextureHeight = renderHeight;
+        }
+
         double oldX = player.x;
         double oldY = player.y;
 
         updatePlayer(&player, worldMap, forward, strafe, turn , mouseDeltaX , deltaTime);
         bool walking = hypot(player.x - oldX, player.y - oldY) > 0.0001;
-        printf("Player Position: (%.2f, %.2f), Walking: %s\n", player.x, player.y, walking ? "true" : "false"); // Debugging line to check player position and walking state
         updateEnemy(&enemy, &player, worldMap, deltaTime);
-        renderScene(renderer, &player,defaultWallTexture, theBestWallTexture, &enemy, textureWidth, textureHeight, worldMap);
+        if (SDL_SetRenderTarget(renderer, sceneTexture) != 0) {
+            fprintf(stderr, "SDL_SetRenderTarget Error: %s\n", SDL_GetError());
+            running = false;
+            break;
+        }
+        bool sceneRendered = renderScene(renderer, &player, defaultWallTexture, theBestWallTexture,
+            &enemy, textureWidth, textureHeight, renderWidth, renderHeight, worldMap);
         
         if (walking) bobPhase += deltaTime * 10.0;
-        waponMovement(walking, bobPhase, bobAmount, woodenMacheteTexture, renderer, deltaTime);
+        if (sceneRendered) {
+            waponMovement(walking, bobPhase, bobAmount, woodenMacheteTexture, renderer,
+                renderWidth, renderHeight, deltaTime);
+        }
+
+        if (SDL_SetRenderTarget(renderer, NULL) != 0) {
+            fprintf(stderr, "SDL_SetRenderTarget reset Error: %s\n", SDL_GetError());
+            running = false;
+            break;
+        }
+        if (!sceneRendered) {
+            running = false;
+            break;
+        }
+        if (SDL_RenderCopy(renderer, sceneTexture, NULL, NULL) != 0) {
+            fprintf(stderr, "SDL_RenderCopy render target Error: %s\n", SDL_GetError());
+            running = false;
+            break;
+        }
 
         SDL_RenderPresent(renderer);
     }
@@ -118,6 +182,8 @@ int main(int argc, char *argv[]) {
     SDL_DestroyTexture(theBestWallTexture);
     SDL_DestroyTexture(enemy.texture);
     SDL_DestroyTexture(woodenMacheteTexture);
+    SDL_DestroyTexture(settingsButtonTexture);
+    SDL_DestroyTexture(sceneTexture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();

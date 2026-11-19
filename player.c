@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <math.h>
+#include <stdio.h>
 #include <SDL2/SDL.h>
 #include "player.h"
 #include "ScreenUpdate.h"
@@ -63,20 +64,30 @@ void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double f
     }
 }
 
-void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture *woodenMacheteTexture, SDL_Renderer *renderer, double deltaTime) {
-    
+void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture *woodenMacheteTexture, SDL_Renderer *renderer, int renderWidth, int renderHeight, double deltaTime) {
     double targetAmount = walking ? 1.0 : 0.0;
-    
+
     bobAmount += (targetAmount - bobAmount) * fmin(1.0, deltaTime * 8.0);
 
-    int bobX = (int)(cos(bobPhase) * 100.0 * bobAmount);
-    int bobY = (int)(sin(bobPhase) * 100.0 * bobAmount);
+    double scale = (double)renderHeight / SCREEN_HEIGHT;
+    int bobX = (int)(cos(bobPhase) * 125.0 * bobAmount * scale);
+    int bobY = (int)(sin(bobPhase) * 125.0 * bobAmount * scale);
 
-    int woodenMacheteHeight;
-    int woodenMacheteWidth;
-    SDL_QueryTexture(woodenMacheteTexture, NULL, NULL, &woodenMacheteWidth, &woodenMacheteHeight);
+    int textureHeight;
+    int textureWidth;
+    if (SDL_QueryTexture(woodenMacheteTexture, NULL, NULL, &textureWidth, &textureHeight) != 0) {
+        fprintf(stderr, "SDL_QueryTexture weapon Error: %s\n", SDL_GetError());
+        return;
+    }
 
-    SDL_Rect handDestination = { 3*SCREEN_WIDTH/4 - woodenMacheteWidth/3 + bobX, SCREEN_HEIGHT/4 - woodenMacheteHeight/5 + bobY, woodenMacheteWidth, woodenMacheteHeight };
+    int weaponWidth = (int)(textureWidth * scale);
+    int weaponHeight = (int)(textureHeight * scale);
+    SDL_Rect handDestination = {
+        3 * renderWidth / 4 - weaponWidth / 3 + bobX,
+        renderHeight / 4 - weaponHeight / 5 + bobY,
+        weaponWidth,
+        weaponHeight
+    };
 
     SDL_RenderCopy(renderer, woodenMacheteTexture, NULL, &handDestination);
 }

@@ -1,6 +1,8 @@
 #include <stdbool.h>
 #include <math.h>
+#include <SDL2/SDL.h>
 #include "player.h"
+#include "ScreenUpdate.h"
 
 static bool isWall(const int map[MAP_HEIGHT][MAP_WIDTH], double x, double y) {
     int mapX = (int)floor(x);
@@ -59,4 +61,22 @@ void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double f
     if (canOccupyMap(map, player->x, player->y + moveY, 0.2)) {
         player->y += moveY;
     }
+}
+
+void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture *woodenMacheteTexture, SDL_Renderer *renderer, double deltaTime) {
+    
+    double targetAmount = walking ? 1.0 : 0.0;
+    
+    bobAmount += (targetAmount - bobAmount) * fmin(1.0, deltaTime * 8.0);
+
+    int bobX = (int)(cos(bobPhase) * 100.0 * bobAmount);
+    int bobY = (int)(sin(bobPhase) * 100.0 * bobAmount);
+
+    int woodenMacheteHeight;
+    int woodenMacheteWidth;
+    SDL_QueryTexture(woodenMacheteTexture, NULL, NULL, &woodenMacheteWidth, &woodenMacheteHeight);
+
+    SDL_Rect handDestination = { 3*SCREEN_WIDTH/4 - woodenMacheteWidth/3 + bobX, SCREEN_HEIGHT/4 - woodenMacheteHeight/5 + bobY, woodenMacheteWidth, woodenMacheteHeight };
+
+    SDL_RenderCopy(renderer, woodenMacheteTexture, NULL, &handDestination);
 }

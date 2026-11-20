@@ -3,7 +3,7 @@
 #include <SDL2/SDL.h>
 #include "enemy.h"
 
-void initEnemy(Enemy *enemy, double x, double y, SDL_Texture *texture, int textureWidth, int textureHeight) {
+void initEnemy(Enemy *enemy, double x, double y, GLuint texture, int textureWidth, int textureHeight) {
     enemy->x = x;
     enemy->y = y;
     enemy->texture = texture;

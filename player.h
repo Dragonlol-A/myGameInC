@@ -24,6 +24,4 @@ void initPlayer(Player *player);
 
 void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double forward, double strafe, double turn, double mouseDeltaX, double deltaTime);
 
-void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture *woodenMacheteTexture, SDL_Texture *weaponSlashTexture, SDL_Renderer *renderer, int renderWidth, int renderHeight, double deltaTime, bool attacking, double attackProgress);
-
 #endif

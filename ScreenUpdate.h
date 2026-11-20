@@ -1,8 +1,8 @@
 #ifndef SCREEN_UPDATE_H
 #define SCREEN_UPDATE_H
 
-#include <SDL2/SDL.h>
 #include <stdbool.h>
+#include "gl_renderer.h"
 #include "player.h"
 #include "enemy.h"
 
@@ -11,10 +11,11 @@
 
 void getRenderResolution(int *width, int *height);
 
-bool renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wallTexture, SDL_Texture *theBestWallTexture, const Enemy *enemy, int textureWidth, int textureHeight, int renderWidth, int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH]);
+bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTexture,
+    const Enemy *enemy, int textureWidth, int textureHeight,
+    int renderWidth, int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH]);
 
-SDL_Texture *loadTextures(SDL_Renderer *renderer, const char *texturePath);
-
-int openMenu(SDL_Renderer *renderer, SDL_Window *window, SDL_Texture *settingsButtonTexture);
+int openMenu(SDL_Window *window, GLuint settingsButtonTexture);
+void drawWeapon(bool walking, double bobPhase, double bobAmount, GLuint weaponTexture, int weaponTextureWidth, int weaponTextureHeight, GLuint slashTexture, int renderWidth, int renderHeight, double deltaTime, bool attacking, double attackProgress);
 
 #endif

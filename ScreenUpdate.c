@@ -2,9 +2,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
-#include <stdint.h>
-#include <SDL2/SDL_image.h>
 #include "ScreenUpdate.h"
 
 const int worldMap[MAP_HEIGHT][MAP_WIDTH] = {
@@ -59,7 +56,19 @@ static const BitmapGlyph bitmapFont[] = {
     {'X', {5, 2, 2, 2, 5}}, {'Y', {5, 5, 2, 2, 2}}
 };
 
-static void drawBitmapText(SDL_Renderer *renderer, const char *text, int x, int y, int scale) {
+static SDL_Color currentDrawColor;
+
+static void fillRect(const SDL_Rect *rect) {
+    glFillRect((float)rect->x, (float)rect->y,
+        (float)rect->w, (float)rect->h, currentDrawColor);
+}
+
+static void outlineRect(const SDL_Rect *rect) {
+    glOutlineRect((float)rect->x, (float)rect->y,
+        (float)rect->w, (float)rect->h, currentDrawColor);
+}
+
+static void drawBitmapText(const char *text, int x, int y, int scale) {
     for (const char *character = text; *character != '\0'; character++) {
         const Uint8 *glyphRows = NULL;
         for (size_t glyphIndex = 0; glyphIndex < sizeof(bitmapFont) / sizeof(bitmapFont[0]); glyphIndex++) {
@@ -73,8 +82,9 @@ static void drawBitmapText(SDL_Renderer *renderer, const char *text, int x, int 
             for (int row = 0; row < 5; row++) {
                 for (int column = 0; column < 3; column++) {
                     if ((glyphRows[row] & (1u << (2 - column))) != 0) {
-                        SDL_Rect pixel = {x + column * scale, y + row * scale, scale, scale};
-                        SDL_RenderFillRect(renderer, &pixel);
+                        glFillRect((float)(x + column * scale),
+                            (float)(y + row * scale), (float)scale, (float)scale,
+                            currentDrawColor);
                     }
                 }
             }
@@ -88,6 +98,36 @@ static bool pointInRect(float x, float y, const SDL_Rect *rect) {
         && y >= rect->y && y < rect->y + rect->h;
 }
 
+static void windowPointToLogical(SDL_Window *window, int windowX, int windowY,
+    int logicalWidth, int logicalHeight, float *logicalX, float *logicalY) {
+    int windowWidth;
+    int windowHeight;
+    int drawableWidth;
+    int drawableHeight;
+    SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+    SDL_GL_GetDrawableSize(window, &drawableWidth, &drawableHeight);
+    if (windowWidth <= 0 || windowHeight <= 0
+        || drawableWidth <= 0 || drawableHeight <= 0
+        || logicalWidth <= 0 || logicalHeight <= 0) {
+        *logicalX = -1.0f;
+        *logicalY = -1.0f;
+        return;
+    }
+
+    float scale = fminf((float)drawableWidth / logicalWidth,
+        (float)drawableHeight / logicalHeight);
+    float viewportWidth = (float)(int)(logicalWidth * scale);
+    float viewportHeight = (float)(int)(logicalHeight * scale);
+    float offsetX = (drawableWidth - viewportWidth) * 0.5f;
+    float offsetY = (drawableHeight - viewportHeight) * 0.5f;
+    float drawableX = (float)windowX * drawableWidth / windowWidth;
+    float drawableY = (float)windowY * drawableHeight / windowHeight;
+    float scaleX = viewportWidth / logicalWidth;
+    float scaleY = viewportHeight / logicalHeight;
+    *logicalX = (drawableX - offsetX) / scaleX;
+    *logicalY = (drawableY - offsetY) / scaleY;
+}
+
 static void updatePausedWindowTitle(SDL_Window *window) {
     char title[64];
     if (fullscreenEnabled) {
@@ -99,8 +139,8 @@ static void updatePausedWindowTitle(SDL_Window *window) {
     SDL_SetWindowTitle(window, title);
 }
 
-static void setDrawColor(SDL_Renderer *renderer, Uint8 red, Uint8 green, Uint8 blue) {
-    SDL_SetRenderDrawColor(renderer, red, green, blue, 255);
+static void setDrawColor(Uint8 red, Uint8 green, Uint8 blue) {
+    currentDrawColor = (SDL_Color){red, green, blue, 255};
 }
 
 void getRenderResolution(int *width, int *height) {
@@ -108,7 +148,7 @@ void getRenderResolution(int *width, int *height) {
     *height = resolutions[resolutionIndex].y;
 }
 
-static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow) {
+static int openResolutionSettings(SDL_Window *gameWindow) {
     const int settingsWidth = 480;
     const int settingsHeight = 620;
     const int dropdownX = 32;
@@ -123,11 +163,6 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
     const SDL_Rect backButton = {250, 540, 198, 54};
     const int resolutionCount = (int)(sizeof(resolutions) / sizeof(resolutions[0]));
 
-    if (SDL_RenderSetLogicalSize(renderer, settingsWidth, settingsHeight) != 0) {
-        fprintf(stderr, "SDL_RenderSetLogicalSize settings Error: %s\n", SDL_GetError());
-        return 0;
-    }
-
     bool settingsOpen = true;
     bool dropdownOpen = false;
     int quitRequested = 0;
@@ -138,26 +173,30 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
     SDL_SetWindowTitle(gameWindow, "Settings - Resolution");
 
     while (settingsOpen) {
-        setDrawColor(renderer, 22, 26, 38);
-        SDL_RenderClear(renderer);
+        int drawableWidth;
+        int drawableHeight;
+        SDL_GL_GetDrawableSize(gameWindow, &drawableWidth, &drawableHeight);
+        glSetLogicalProjection(drawableWidth, drawableHeight, settingsWidth, settingsHeight);
+        glRendererClear(22, 26, 38);
 
-        setDrawColor(renderer, 235, 238, 245);
-        drawBitmapText(renderer, "RESOLUTION", 32, 32, 5);
+        setDrawColor(235, 238, 245);
+        drawBitmapText("RESOLUTION", 32, 32, 5);
 
         SDL_Rect dropdown = {dropdownX, dropdownY, dropdownWidth, dropdownHeight};
-        setDrawColor(renderer, 48, 56, 76);
-        SDL_RenderFillRect(renderer, &dropdown);
-        setDrawColor(renderer, 180, 190, 210);
-        SDL_RenderDrawRect(renderer, &dropdown);
+        setDrawColor(48, 56, 76);
+        fillRect(&dropdown);
+        setDrawColor(180, 190, 210);
+        outlineRect(&dropdown);
 
         char resolutionLabel[32];
-        snprintf(resolutionLabel, sizeof(resolutionLabel), "%dx%d", resolutions[resolutionIndex].x, resolutions[resolutionIndex].y);
-        setDrawColor(renderer, 255, 255, 255);
-        drawBitmapText(renderer, resolutionLabel, dropdownX + 16, dropdownY + 18, 5);
-        SDL_RenderDrawLine(renderer, dropdownX + dropdownWidth - 34, dropdownY + 23,
-            dropdownX + dropdownWidth - 24, dropdownY + 33);
-        SDL_RenderDrawLine(renderer, dropdownX + dropdownWidth - 24, dropdownY + 33,
-            dropdownX + dropdownWidth - 14, dropdownY + 23);
+        snprintf(resolutionLabel, sizeof(resolutionLabel), "%dx%d",
+            resolutions[resolutionIndex].x, resolutions[resolutionIndex].y);
+        setDrawColor(255, 255, 255);
+        drawBitmapText(resolutionLabel, dropdownX + 16, dropdownY + 18, 5);
+        glDrawLine(dropdownX + dropdownWidth - 34, dropdownY + 23,
+            dropdownX + dropdownWidth - 24, dropdownY + 33, currentDrawColor);
+        glDrawLine(dropdownX + dropdownWidth - 24, dropdownY + 33,
+            dropdownX + dropdownWidth - 14, dropdownY + 23, currentDrawColor);
 
         if (dropdownOpen) {
             for (int index = 0; index < resolutionCount; index++) {
@@ -168,23 +207,23 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
                     optionHeight
                 };
                 if (index == resolutionIndex) {
-                    setDrawColor(renderer, 58, 105, 78);
+                    setDrawColor(58, 105, 78);
                 } else {
-                    setDrawColor(renderer, 38, 45, 62);
+                    setDrawColor(38, 45, 62);
                 }
-                SDL_RenderFillRect(renderer, &option);
-                setDrawColor(renderer, 110, 125, 150);
-                SDL_RenderDrawRect(renderer, &option);
+                fillRect(&option);
+                setDrawColor(110, 125, 150);
+                outlineRect(&option);
 
                 snprintf(resolutionLabel, sizeof(resolutionLabel), "%dx%d",
                     resolutions[index].x, resolutions[index].y);
-                setDrawColor(renderer, 255, 255, 255);
-                drawBitmapText(renderer, resolutionLabel, dropdownX + 16, option.y + 12, 4);
+                setDrawColor(255, 255, 255);
+                drawBitmapText(resolutionLabel, dropdownX + 16, option.y + 12, 4);
             }
         }
 
-        setDrawColor(renderer, 180, 190, 210);
-        SDL_RenderDrawRect(renderer, &fullscreenCheckbox);
+        setDrawColor(180, 190, 210);
+        outlineRect(&fullscreenCheckbox);
         if (fullscreenEnabled) {
             SDL_Rect checkmark = {
                 fullscreenCheckbox.x + 5,
@@ -192,14 +231,14 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
                 fullscreenCheckbox.w - 10,
                 fullscreenCheckbox.h - 10
             };
-            setDrawColor(renderer, 54, 130, 88);
-            SDL_RenderFillRect(renderer, &checkmark);
+            setDrawColor(54, 130, 88);
+            fillRect(&checkmark);
         }
-        setDrawColor(renderer, 255, 255, 255);
-        drawBitmapText(renderer, "FULLSCREEN", 68, 452, 4);
+        setDrawColor(255, 255, 255);
+        drawBitmapText("FULLSCREEN", 68, 452, 4);
 
-        setDrawColor(renderer, 180, 190, 210);
-        SDL_RenderDrawRect(renderer, &vsyncCheckbox);
+        setDrawColor(180, 190, 210);
+        outlineRect(&vsyncCheckbox);
         if (vsyncEnabled) {
             SDL_Rect checkmark = {
                 vsyncCheckbox.x + 5,
@@ -207,24 +246,24 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
                 vsyncCheckbox.w - 10,
                 vsyncCheckbox.h - 10
             };
-            setDrawColor(renderer, 54, 130, 88);
-            SDL_RenderFillRect(renderer, &checkmark);
+            setDrawColor(54, 130, 88);
+            fillRect(&checkmark);
         }
-        setDrawColor(renderer, 255, 255, 255);
-        drawBitmapText(renderer, "VSYNC", 68, 482, 4);
+        setDrawColor(255, 255, 255);
+        drawBitmapText("VSYNC", 68, 482, 4);
 
-        setDrawColor(renderer, 54, 130, 88);
-        SDL_RenderFillRect(renderer, &applyButton);
-        setDrawColor(renderer, 255, 255, 255);
-        drawBitmapText(renderer, "APPLY", applyButton.x + 49, applyButton.y + 17, 5);
+        setDrawColor(54, 130, 88);
+        fillRect(&applyButton);
+        setDrawColor(255, 255, 255);
+        drawBitmapText("APPLY", applyButton.x + 49, applyButton.y + 17, 5);
 
         SDL_Rect backButtonColor = backButton;
-        setDrawColor(renderer, 72, 82, 105);
-        SDL_RenderFillRect(renderer, &backButtonColor);
-        setDrawColor(renderer, 255, 255, 255);
-        drawBitmapText(renderer, "BACK", backButton.x + 59, backButton.y + 17, 5);
+        setDrawColor(72, 82, 105);
+        fillRect(&backButtonColor);
+        setDrawColor(255, 255, 255);
+        drawBitmapText("BACK", backButton.x + 59, backButton.y + 17, 5);
 
-        SDL_RenderPresent(renderer);
+        SDL_GL_SwapWindow(gameWindow);
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -247,8 +286,10 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
             } else if (event.type == SDL_MOUSEBUTTONDOWN
                 && event.button.button == SDL_BUTTON_LEFT
                 && event.button.windowID == gameWindowId) {
-                float mouseX = (float)event.button.x;
-                float mouseY = (float)event.button.y;
+                float mouseX;
+                float mouseY;
+                windowPointToLogical(gameWindow, event.button.x, event.button.y,
+                    settingsWidth, settingsHeight, &mouseX, &mouseY);
 
                 if (pointInRect(mouseX, mouseY, &fullscreenCheckbox)) {
                     fullscreenEnabled = !fullscreenEnabled;
@@ -279,8 +320,8 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
 
                 if (pointInRect(mouseX, mouseY, &applyButton)) {
                     bool vsyncChanged = vsyncEnabled != originalVsyncEnabled;
-                    if (vsyncChanged && SDL_RenderSetVSync(renderer, vsyncEnabled ? 1 : 0) != 0) {
-                        fprintf(stderr, "SDL_RenderSetVSync Error: %s\n", SDL_GetError());
+                    if (vsyncChanged && glSetSwapInterval(vsyncEnabled) != 0) {
+                        fprintf(stderr, "SDL_GL_SetSwapInterval Error: %s\n", SDL_GetError());
                         resolutionIndex = originalResolutionIndex;
                         fullscreenEnabled = originalFullscreenEnabled;
                         vsyncEnabled = originalVsyncEnabled;
@@ -289,8 +330,8 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
                         if (SDL_SetWindowFullscreen(gameWindow, fullscreenFlags) != 0) {
                             fprintf(stderr, "SDL_SetWindowFullscreen Error: %s\n", SDL_GetError());
                             if (vsyncChanged
-                                && SDL_RenderSetVSync(renderer, originalVsyncEnabled ? 1 : 0) != 0) {
-                                fprintf(stderr, "SDL_RenderSetVSync rollback Error: %s\n", SDL_GetError());
+                                && glSetSwapInterval(originalVsyncEnabled) != 0) {
+                                fprintf(stderr, "SDL_GL_SetSwapInterval rollback Error: %s\n", SDL_GetError());
                             }
                             resolutionIndex = originalResolutionIndex;
                             fullscreenEnabled = originalFullscreenEnabled;
@@ -319,204 +360,44 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
         SDL_Delay(16);
     }
 
-    if (SDL_RenderSetLogicalSize(renderer, 0, 0) != 0) {
-        fprintf(stderr, "SDL_RenderSetLogicalSize reset Error: %s\n", SDL_GetError());
-    }
+    int drawableWidth;
+    int drawableHeight;
+    SDL_GL_GetDrawableSize(gameWindow, &drawableWidth, &drawableHeight);
+    glSet2DProjection(drawableWidth, drawableHeight);
     updatePausedWindowTitle(gameWindow);
     return quitRequested;
 }
 
-SDL_Texture *loadTextures(SDL_Renderer *renderer, const char *texturePath) {
-    SDL_Surface *surface = IMG_Load(texturePath);
+typedef struct {
+    int x;
+    int drawStart;
+    int drawEnd;
+    int textureX;
+    int sourceStart;
+    int sourceEnd;
+    Uint8 shade;
+    int material;
+} WallColumn;
 
-    if (surface == NULL) {
-        fprintf(stderr, "IMG_Load Error: %s\n", IMG_GetError());
-        return NULL;
-    }
-
-    SDL_Texture *wallTexture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_FreeSurface(surface);
-
-    if (wallTexture == NULL) {
-        fprintf(stderr, "Texture creation error: %s\n", SDL_GetError());
-        return NULL;
-    }
-    return wallTexture;
-}
-
-static bool drawTexturedFloor(SDL_Renderer *renderer, const Player *player,
-    SDL_Texture *floorTexture, int renderWidth, int renderHeight) {
-    int floorHeight = renderHeight - renderHeight / 2;
-    double rayDirX0 = player->dirX - player->planeX;
-    double rayDirY0 = player->dirY - player->planeY;
-    double rayDirX1 = player->dirX + player->planeX;
-    double rayDirY1 = player->dirY + player->planeY;
-    double stepHeight = 0.5 * renderHeight;
-    size_t maxQuads = 0;
-
-    for (int y = 0; y < floorHeight; y++) {
-        double rowDistance = stepHeight / (y + 1);
-        double worldWidthX = rowDistance * (rayDirX1 - rayDirX0);
-        double worldWidthY = rowDistance * (rayDirY1 - rayDirY0);
-        size_t rowQuads = (size_t)ceil(fabs(worldWidthX)) + (size_t)ceil(fabs(worldWidthY)) + 1;
-        if (rowQuads > SIZE_MAX - maxQuads) {
-            fprintf(stderr, "Floor geometry is too large.\n");
-            return false;
-        }
-        maxQuads += rowQuads;
-    }
-
-    if (maxQuads > (size_t)INT_MAX / 6 || maxQuads > SIZE_MAX / (4 * sizeof(SDL_Vertex)) || maxQuads > SIZE_MAX / (6 * sizeof(int))) {
-        fprintf(stderr, "Floor geometry is too large.\n");
-        return false;
-    }
-
-    SDL_Vertex *vertices = malloc(maxQuads * 4 * sizeof(*vertices));
-    int *indices = malloc(maxQuads * 6 * sizeof(*indices));
-    if (vertices == NULL || indices == NULL) {
-        fprintf(stderr, "Failed to allocate floor geometry.\n");
-        free(vertices);
-        free(indices);
-        return false;
-    }
-
-    int vertexCount = 0;
-    int indexCount = 0;
-
-    for (int y = 0; y < floorHeight; y++) {
-        double rowDistance = stepHeight / (y + 1);
-        double startX = player->x + rowDistance * rayDirX0;
-        double startY = player->y + rowDistance * rayDirY0;
-        double deltaX = rowDistance * (rayDirX1 - rayDirX0);
-        double deltaY = rowDistance * (rayDirY1 - rayDirY0);
-        double nextX = INFINITY;
-        double nextY = INFINITY;
-        double stepTX = INFINITY;
-        double stepTY = INFINITY;
-
-        if (deltaX > 0.0) {
-            nextX = (floor(startX) + 1.0 - startX) / deltaX;
-            stepTX = 1.0 / deltaX;
-        } else if (deltaX < 0.0) {
-            nextX = (ceil(startX) - 1.0 - startX) / deltaX;
-            stepTX = -1.0 / deltaX;
-        }
-        if (deltaY > 0.0) {
-            nextY = (floor(startY) + 1.0 - startY) / deltaY;
-            stepTY = 1.0 / deltaY;
-        } else if (deltaY < 0.0) {
-            nextY = (ceil(startY) - 1.0 - startY) / deltaY;
-            stepTY = -1.0 / deltaY;
-        }
-
-        double currentT = 0.0;
-        while (currentT < 1.0) {
-            double endT = fmin(1.0, fmin(nextX, nextY));
-            double middleT = (currentT + endT) * 0.5;
-            double tileX = floor(startX + deltaX * middleT);
-            double tileY = floor(startY + deltaY * middleT);
-            double u0 = startX + deltaX * currentT - tileX;
-            double v0 = startY + deltaY * currentT - tileY;
-            double u1 = startX + deltaX * endT - tileX;
-            double v1 = startY + deltaY * endT - tileY;
-            float textureU0 = (float)fmax(0.0, fmin(1.0, u0));
-            float textureV0 = (float)fmax(0.0, fmin(1.0, v0));
-            float textureU1 = (float)fmax(0.0, fmin(1.0, u1));
-            float textureV1 = (float)fmax(0.0, fmin(1.0, v1));
-
-            SDL_Color white = {255, 255, 255, 255};
-            float screenX0 = (float)(currentT * renderWidth);
-            float screenX1 = (float)(endT * renderWidth);
-            float screenY0 = (float)(renderHeight / 2 + y);
-            float screenY1 = screenY0 + 1.0f;
-            int baseVertex = vertexCount;
-
-            vertices[vertexCount++] = (SDL_Vertex){
-                {screenX0, screenY0}, white, {textureU0, textureV0}
-            };
-            vertices[vertexCount++] = (SDL_Vertex){
-                {screenX1, screenY0}, white, {textureU1, textureV1}
-            };
-            vertices[vertexCount++] = (SDL_Vertex){
-                {screenX1, screenY1}, white, {textureU1, textureV1}
-            };
-            vertices[vertexCount++] = (SDL_Vertex){
-                {screenX0, screenY1}, white, {textureU0, textureV0}
-            };
-            indices[indexCount++] = baseVertex;
-            indices[indexCount++] = baseVertex + 1;
-            indices[indexCount++] = baseVertex + 2;
-            indices[indexCount++] = baseVertex;
-            indices[indexCount++] = baseVertex + 2;
-            indices[indexCount++] = baseVertex + 3;
-
-            if (endT >= 1.0) {
-                break;
-            }
-            currentT = endT;
-            if (nextX <= endT) {
-                nextX += stepTX;
-            }
-            if (nextY <= endT) {
-                nextY += stepTY;
-            }
-        }
-    }
-
-    SDL_BlendMode previousBlendMode;
-    if (SDL_GetTextureBlendMode(floorTexture, &previousBlendMode) != 0) {
-        fprintf(stderr, "SDL_GetTextureBlendMode floor Error: %s\n", SDL_GetError());
-        free(vertices);
-        free(indices);
-        return false;
-    }
-    if (SDL_SetTextureBlendMode(floorTexture, SDL_BLENDMODE_NONE) != 0
-        || SDL_SetTextureColorMod(floorTexture, 255, 255, 255) != 0) {
-        fprintf(stderr, "Failed to configure floor texture: %s\n", SDL_GetError());
-        SDL_SetTextureBlendMode(floorTexture, previousBlendMode);
-        free(vertices);
-        free(indices);
-        return false;
-    }
-
-    bool rendered = SDL_RenderGeometry(renderer, floorTexture, vertices,
-        vertexCount, indices, indexCount) == 0;
-    if (!rendered) {
-        fprintf(stderr, "SDL_RenderGeometry floor Error: %s\n", SDL_GetError());
-    }
-    bool restored = SDL_SetTextureBlendMode(floorTexture, previousBlendMode) == 0;
-    if (!restored) {
-        fprintf(stderr, "SDL_SetTextureBlendMode restore Error: %s\n", SDL_GetError());
-    }
-
-    free(vertices);
-    free(indices);
-    return rendered && restored;
-}
-
-bool renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wallTexture, SDL_Texture *theBestWallTexture, const Enemy *enemy, int textureWidth, int textureHeight, int renderWidth, int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH]) {
+bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTexture,
+    const Enemy *enemy, int textureWidth, int textureHeight, int renderWidth,
+    int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH]) {
     if (renderWidth <= 0 || renderHeight <= 0) {
         fprintf(stderr, "Renderer output size is invalid: %d x %d\n", renderWidth, renderHeight);
         return false;
     }
 
     double *zBuffer = malloc((size_t)renderWidth * sizeof(*zBuffer));
-    if (zBuffer == NULL) {
-        fprintf(stderr, "Failed to allocate ray z-buffer.\n");
-        return false;
-    }
-
-    setDrawColor(renderer, 42, 48, 68);
-    SDL_Rect ceiling = {0, 0, renderWidth, renderHeight / 2};
-    SDL_RenderFillRect(renderer, &ceiling);
-
-    setDrawColor(renderer, 62, 54, 45);
-    SDL_Rect floorRect = {0, renderHeight / 2, renderWidth, renderHeight - renderHeight / 2};
-    SDL_RenderFillRect(renderer, &floorRect);
-    if (!drawTexturedFloor(renderer, player, wallTexture, renderWidth, renderHeight)) {
+    WallColumn *wallColumns = calloc((size_t)renderWidth, sizeof(*wallColumns));
+    if (zBuffer == NULL || wallColumns == NULL) {
+        fprintf(stderr, "Failed to allocate raycasting buffers.\n");
         free(zBuffer);
+        free(wallColumns);
         return false;
     }
+
+    glDrawFloor(wallTexture, player->x, player->y, player->dirX, player->dirY,
+        player->planeX, player->planeY, renderWidth, renderHeight);
 
     for (int x = 0; x < renderWidth; x++) {
         zBuffer[x] = INFINITY;
@@ -624,71 +505,156 @@ bool renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wall
 
         double brightness = 1.0 / (1.0 + perpendicularDistance * 0.12);
         Uint8 shade = (Uint8)(255.0 * brightness);
-        
         if (side == 1) {
             brightness *= 0.72;
         }
 
-        if (map[mapY][mapX] == 1) {
-            SDL_SetTextureColorMod(wallTexture, shade, shade, shade);
-            SDL_Rect source = {textureX, sourceStart, 1, sourceEnd - sourceStart};
-            SDL_Rect destination = {x, drawStart, 1, drawEnd - drawStart};
-            SDL_RenderCopy(renderer, wallTexture, &source, &destination);
-        }
-        if(map[mapY][mapX] == 2) {
-            SDL_SetTextureColorMod(theBestWallTexture, shade, shade, shade);
-            SDL_Rect source = {textureX, sourceStart, 1, sourceEnd - sourceStart};
-            SDL_Rect destination = {x, drawStart, 1, drawEnd - drawStart};
-            SDL_RenderCopy(renderer, theBestWallTexture, &source, &destination);
+        if (map[mapY][mapX] == 1 || map[mapY][mapX] == 2) {
+            wallColumns[x] = (WallColumn){
+                x, drawStart, drawEnd, textureX, sourceStart, sourceEnd,
+                shade, map[mapY][mapX]
+            };
         }
     }
+
+    glEnable(GL_TEXTURE_2D);
+    for (int material = 1; material <= 2; material++) {
+        GLuint texture = material == 1 ? wallTexture : theBestWallTexture;
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glBegin(GL_QUADS);
+        for (int x = 0; x < renderWidth; x++) {
+            const WallColumn *column = &wallColumns[x];
+            if (column->material != material) {
+                continue;
+            }
+
+            float textureU = (column->textureX + 0.5f) / textureWidth;
+            float textureV0 = (float)column->sourceStart / textureHeight;
+            float textureV1 = (float)column->sourceEnd / textureHeight;
+            glColor4ub(column->shade, column->shade, column->shade, 255);
+            glTexCoord2f(textureU, textureV0);
+            glVertex2f((float)column->x, (float)column->drawStart);
+            glTexCoord2f(textureU, textureV0);
+            glVertex2f((float)(column->x + 1), (float)column->drawStart);
+            glTexCoord2f(textureU, textureV1);
+            glVertex2f((float)(column->x + 1), (float)column->drawEnd);
+            glTexCoord2f(textureU, textureV1);
+            glVertex2f((float)column->x, (float)column->drawEnd);
+        }
+        glEnd();
+    }
+
     double relativeX = enemy->x - player->x;
-double relativeY = enemy->y - player->y;
+    double relativeY = enemy->y - player->y;
+    double determinant = player->planeX * player->dirY
+        - player->dirX * player->planeY;
+    double inverseDeterminant = 1.0 / determinant;
+    double transformX = inverseDeterminant
+        * (player->dirY * relativeX - player->dirX * relativeY);
+    double transformY = inverseDeterminant
+        * (-player->planeY * relativeX + player->planeX * relativeY);
 
-double determinant =
-    player->planeX * player->dirY - player->dirX * player->planeY;
-double inverseDeterminant = 1.0 / determinant;
+    if (transformY > 0.1) {
+        int screenX = (int)((renderWidth / 2.0) * (1.0 + transformX / transformY));
+        double spriteDistance = hypot(relativeX, relativeY);
+        int spriteHeight = (int)(renderHeight / spriteDistance);
+        int spriteWidth = (int)(spriteHeight
+            * (double)enemy->textureWidth / enemy->textureHeight);
+        if (spriteWidth > 0 && spriteHeight > 0) {
+            int spriteLeft = screenX - spriteWidth / 2;
+            int spriteTop = renderHeight / 2 - spriteHeight / 2;
+            int firstX = spriteLeft < 0 ? 0 : spriteLeft;
+            int endX = spriteLeft + spriteWidth;
+            if (endX > renderWidth) {
+                endX = renderWidth;
+            }
 
-double transformX = inverseDeterminant *
-    (player->dirY * relativeX - player->dirX * relativeY);
-double transformY = inverseDeterminant *
-    (-player->planeY * relativeX + player->planeX * relativeY);
-
-if (transformY > 0.1) {
-    int screenX = (int)((renderWidth / 2.0) * (1.0 + transformX / transformY));
-    double spriteDistance = hypot(relativeX, relativeY);
-    int spriteHeight = (int)(renderHeight / spriteDistance);
-    int spriteWidth = (int)(spriteHeight * (double)enemy->textureWidth / enemy->textureHeight);
-
-    int spriteLeft = screenX - spriteWidth / 2;
-    int spriteTop = renderHeight / 2 - spriteHeight / 2;
-
-    int firstX = spriteLeft < 0 ? 0 : spriteLeft;
-    int endX = spriteLeft + spriteWidth;
-    if (endX > renderWidth) {
-        endX = renderWidth;
-    }
-
-    SDL_SetTextureBlendMode(enemy->texture, SDL_BLENDMODE_BLEND);
-
-    for (int stripeX = firstX; stripeX < endX; stripeX++) {
-        if (transformY < zBuffer[stripeX]) {
-            int sourceX = (int)((stripeX - spriteLeft) *
-                (double)enemy->textureWidth / spriteWidth);
-
-            SDL_Rect source = {sourceX, 0, 1, enemy->textureHeight};
-            SDL_Rect destination = {stripeX, spriteTop, 1, spriteHeight};
-            SDL_RenderCopy(renderer, enemy->texture, &source, &destination);
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, enemy->texture);
+            glColor4ub(255, 255, 255, 255);
+            glBegin(GL_QUADS);
+            for (int stripeX = firstX; stripeX < endX; stripeX++) {
+                if (transformY < zBuffer[stripeX]) {
+                    float textureX0 = (float)(stripeX - spriteLeft) / spriteWidth;
+                    float textureX1 = (float)(stripeX + 1 - spriteLeft) / spriteWidth;
+                    glTexCoord2f(textureX0, 0.0f);
+                    glVertex2f((float)stripeX, (float)spriteTop);
+                    glTexCoord2f(textureX1, 0.0f);
+                    glVertex2f((float)(stripeX + 1), (float)spriteTop);
+                    glTexCoord2f(textureX1, 1.0f);
+                    glVertex2f((float)(stripeX + 1), (float)(spriteTop + spriteHeight));
+                    glTexCoord2f(textureX0, 1.0f);
+                    glVertex2f((float)stripeX, (float)(spriteTop + spriteHeight));
+                }
+            }
+            glEnd();
         }
     }
-}
 
     free(zBuffer);
-    SDL_SetTextureColorMod(wallTexture, 255, 255, 255);
+    free(wallColumns);
+    glDisable(GL_TEXTURE_2D);
+    glColor4ub(255, 255, 255, 255);
     return true;
 }
 
-int openMenu(SDL_Renderer *renderer, SDL_Window *window, SDL_Texture *settingsButtonTexture) {
+void drawWeapon(bool walking, double bobPhase, double bobAmount,
+    GLuint weaponTexture, int weaponTextureWidth, int weaponTextureHeight,
+    GLuint slashTexture, int renderWidth, int renderHeight, double deltaTime,
+    bool attacking, double attackProgress) {
+    double targetAmount = walking ? 1.0 : 0.0;
+    bobAmount += (targetAmount - bobAmount) * fmin(1.0, deltaTime * 8.0);
+    double scale = (double)renderHeight / SCREEN_HEIGHT;
+    int bobX = (int)(cos(bobPhase) * 125.0 * bobAmount * scale);
+    int bobY = (int)(sin(bobPhase) * 125.0 * bobAmount * scale);
+    int weaponWidth = (int)(weaponTextureWidth * scale);
+    int weaponHeight = (int)(weaponTextureHeight * scale);
+    float weaponX = (float)(3 * renderWidth / 4 - weaponWidth / 3 + bobX);
+    float weaponY = (float)(renderHeight / 4 - weaponHeight / 5 + bobY);
+
+    double swingAngle = 0.0;
+    double progressArc = 0.0;
+    if (attacking) {
+        double progress = fmin(1.0, fmax(0.0, attackProgress));
+        if (progress < 0.2) {
+            double anticipation = progress / 0.2;
+            anticipation = anticipation * anticipation * (3.0 - 2.0 * anticipation);
+            swingAngle = 50.0 * anticipation;
+        } else if (progress < 0.75) {
+            double slashProgress = (progress - 0.2) / 0.55;
+            slashProgress = slashProgress * slashProgress * (3.0 - 2.0 * slashProgress);
+            swingAngle = 50.0 - 110.0 * slashProgress;
+        } else {
+            double recovery = (progress - 0.75) / 0.25;
+            recovery = recovery * recovery * (3.0 - 2.0 * recovery);
+            swingAngle = -60.0 * (1.0 - recovery);
+        }
+
+        progressArc = sin(progress * 3.14159265358979323846);
+        weaponX -= (float)(50.0 * scale * progressArc);
+        weaponY -= (float)(90.0 * scale * progressArc);
+    }
+
+    glDrawTexture(weaponTexture, weaponX, weaponY, (float)weaponWidth,
+        (float)weaponHeight, (float)swingAngle, weaponWidth / 2.0f,
+        weaponHeight * 0.9f, 255);
+
+    if (attacking && attackProgress >= 0.4 && attackProgress <= 0.85) {
+        double slashProgress = (attackProgress - 0.2) / 0.55;
+        double fade = fmin(slashProgress / 0.2, (1.0 - slashProgress) / 0.2);
+        fade = fmax(0.0, fmin(1.0, fade));
+        int slashSize = (int)(renderHeight * 0.78);
+        float slashX = (float)(renderWidth / 2 - slashSize / 2
+            - renderWidth * 0.04 * progressArc);
+        float slashY = (float)(renderHeight / 2 - slashSize / 2
+            - renderHeight * 0.08 * progressArc);
+        glDrawTexture(slashTexture, slashX, slashY, (float)slashSize,
+            (float)slashSize, (float)(-45.0 + 90.0 * slashProgress),
+            slashSize / 2.0f, slashSize / 2.0f, (Uint8)(220.0 * fade));
+    }
+}
+
+int openMenu(SDL_Window *window, GLuint settingsButtonTexture) {
     bool onMenu = true;
 
     SDL_SetRelativeMouseMode(SDL_FALSE);
@@ -698,21 +664,23 @@ int openMenu(SDL_Renderer *renderer, SDL_Window *window, SDL_Texture *settingsBu
     while (onMenu) {
         int renderWidth;
         int renderHeight;
-        if (SDL_GetRendererOutputSize(renderer, &renderWidth, &renderHeight) != 0) {
-            fprintf(stderr, "SDL_GetRendererOutputSize Error: %s\n", SDL_GetError());
-            SDL_SetRelativeMouseMode(SDL_TRUE);
-            return 1;
-        }
-
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
+        SDL_GL_GetDrawableSize(window, &renderWidth, &renderHeight);
+        glSet2DProjection(renderWidth, renderHeight);
+        glRendererClear(0, 0, 0);
         int buttonSizeH = renderHeight / 8;
-        int buttonSizeW= renderWidth /8;
+        int buttonSizeW = renderWidth / 8;
 
-        SDL_Rect optionButton = { renderWidth / 2 - buttonSizeW , renderHeight / 2 - buttonSizeH / 2, buttonSizeW *2, buttonSizeH};
-
-        SDL_RenderCopy(renderer, settingsButtonTexture, NULL, &optionButton);
-        SDL_RenderPresent(renderer);
+        SDL_Rect optionButton = {
+            renderWidth / 2 - buttonSizeW,
+            renderHeight / 2 - buttonSizeH / 2,
+            buttonSizeW * 2,
+            buttonSizeH
+        };
+        glDrawTexture(settingsButtonTexture, (float)optionButton.x,
+            (float)optionButton.y, (float)optionButton.w, (float)optionButton.h,
+            0.0f, (float)optionButton.w / 2.0f,
+            (float)optionButton.h / 2.0f, 255);
+        SDL_GL_SwapWindow(window);
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -738,9 +706,15 @@ int openMenu(SDL_Renderer *renderer, SDL_Window *window, SDL_Texture *settingsBu
                 && event.button.windowID == windowId) {
                 float mouseX;
                 float mouseY;
-                SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y, &mouseX, &mouseY);
+                int windowWidth;
+                int windowHeight;
+                SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+                mouseX = windowWidth > 0
+                    ? (float)event.button.x * renderWidth / windowWidth : 0.0f;
+                mouseY = windowHeight > 0
+                    ? (float)event.button.y * renderHeight / windowHeight : 0.0f;
                 if (pointInRect(mouseX, mouseY, &optionButton)
-                    && openResolutionSettings(renderer, window) != 0) {
+                    && openResolutionSettings(window) != 0) {
                     SDL_SetRelativeMouseMode(SDL_TRUE);
                     return 1;
                 }

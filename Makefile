@@ -1,9 +1,9 @@
 CC := gcc
 TARGET := game
-SRC := main.c ScreenUpdate.c player.c enemy.c
+SRC := main.c ScreenUpdate.c player.c enemy.c gl_renderer.c
 
 CFLAGS = $(shell pkg-config --cflags sdl2) -Wall -Wextra
-LDLIBS = $(shell pkg-config --libs sdl2 SDL2_image) -lm
+LDLIBS = $(shell pkg-config --libs sdl2 SDL2_image gl) -lm
 
 WINDOWS_CC ?= x86_64-w64-mingw32-gcc
 WINDOWS_TARGET := game.exe
@@ -15,7 +15,7 @@ WINDOWS_CFLAGS ?= -I$(WINDOWS_SDL2_ROOT)/include -I$(WINDOWS_SDL2_ROOT)/include/
 	-I$(WINDOWS_SDL2_IMAGE_ROOT)/include -I$(WINDOWS_SDL2_IMAGE_ROOT)/include/SDL2 \
 	-Dmain=SDL_main
 WINDOWS_LDLIBS ?= -L$(WINDOWS_SDL2_IMAGE_ROOT)/lib -L$(WINDOWS_SDL2_ROOT)/lib \
-	-lmingw32 -lSDL2main -lSDL2_image -lSDL2 -mwindows -lm
+	-lmingw32 -lSDL2main -lSDL2_image -lSDL2 -lopengl32 -mwindows -lm
 
 .PHONY: all clean windows windows-deps
 

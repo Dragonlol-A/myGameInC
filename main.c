@@ -84,7 +84,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    double bobPhase = 0.0;
     double bobAmount = 0.0;
     const double attackDuration = 0.42;
     const double attackCooldownDuration = 0.65;
@@ -169,9 +168,8 @@ int main(int argc, char *argv[]) {
             theBestWallTexture, &enemy, textureWidth, textureHeight,
             renderWidth, renderHeight, worldMap);
         
-        if (walking) bobPhase += deltaTime * 10.0;
         if (sceneRendered) {
-            drawWeapon(walking, bobPhase, bobAmount, woodenMacheteTexture,
+            drawWeapon(walking, player.bobPhase, bobAmount, woodenMacheteTexture,
                 weaponTextureWidth, weaponTextureHeight, weaponSlashTexture,
                 renderWidth, renderHeight, deltaTime, attacking, attackProgress);
         }

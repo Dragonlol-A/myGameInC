@@ -27,12 +27,15 @@ void initPlayer(Player *player) {
     player->dirY = 0.0;
     player->planeX = 0.0;
     player->planeY = 0.66;
+    player->bobPhase = 0.0;
+    player->cameraBob = 0.0;
 }
 
 void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double forward, double strafe, double turn, double mouseDeltaX, double deltaTime) {
     const double moveSpeed = 3.0;
     const double rotationSpeed = 2.0;
     const double mouseSensitivity = 0.003;
+    const double bobAmplitude = 0.012;
 
     double rotation = turn * rotationSpeed * deltaTime - mouseDeltaX * mouseSensitivity;
     double cosRotation = cos(rotation);
@@ -53,6 +56,8 @@ void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double f
 
     double moveX = (player->dirX * forward - player->dirY * strafe) * moveSpeed * deltaTime;
     double moveY = (player->dirY * forward + player->dirX * strafe) * moveSpeed * deltaTime;
+    double oldX = player->x;
+    double oldY = player->y;
 
     if (canOccupyMap(map, player->x + moveX, player->y, 0.2)) {
         player->x += moveX;
@@ -60,4 +65,11 @@ void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double f
     if (canOccupyMap(map, player->x, player->y + moveY, 0.2)) {
         player->y += moveY;
     }
+
+    bool walking = hypot(player->x - oldX, player->y - oldY) > 0.0001;
+    if (walking) {
+        player->bobPhase += deltaTime * 10.0;
+    }
+    double targetBob = walking ? sin(player->bobPhase) * bobAmplitude : 0.0;
+    player->cameraBob += (targetBob - player->cameraBob) * fmin(1.0, deltaTime * 10.0);
 }

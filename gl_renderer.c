@@ -23,6 +23,7 @@ typedef void (APIENTRYP GLDeleteProgramProc)(GLuint program);
 typedef void (APIENTRYP GLUseProgramProc)(GLuint program);
 typedef GLint (APIENTRYP GLGetUniformLocationProc)(GLuint program, const GLchar *name);
 typedef void (APIENTRYP GLUniform1iProc)(GLint location, GLint value);
+typedef void (APIENTRYP GLUniform1fProc)(GLint location, GLfloat value);
 typedef void (APIENTRYP GLUniform2fProc)(GLint location, GLfloat v0, GLfloat v1);
 typedef void (APIENTRYP GLGenFramebuffersProc)(GLsizei n, GLuint *framebuffers);
 typedef void (APIENTRYP GLDeleteFramebuffersProc)(GLsizei n, const GLuint *framebuffers);
@@ -46,6 +47,7 @@ static GLDeleteProgramProc pglDeleteProgram;
 static GLUseProgramProc pglUseProgram;
 static GLGetUniformLocationProc pglGetUniformLocation;
 static GLUniform1iProc pglUniform1i;
+static GLUniform1fProc pglUniform1f;
 static GLUniform2fProc pglUniform2f;
 static GLGenFramebuffersProc pglGenFramebuffers;
 static GLDeleteFramebuffersProc pglDeleteFramebuffers;
@@ -58,6 +60,7 @@ static GLint floorTextureUniform;
 static GLint floorPositionUniform;
 static GLint floorDirectionUniform;
 static GLint floorPlaneUniform;
+static GLint floorCameraOffsetUniform;
 static GLint floorResolutionUniform;
 
 static bool loadGLFunction(void *destination, size_t destinationSize, const char *name) {
@@ -96,12 +99,13 @@ static GLuint compileFloorProgram(void) {
         "uniform vec2 playerPosition;\n"
         "uniform vec2 direction;\n"
         "uniform vec2 cameraPlane;\n"
+        "uniform float cameraOffsetY;\n"
         "uniform vec2 resolution;\n"
         "void main() {\n"
-        "    float horizon = resolution.y * 0.5;\n"
+        "    float horizon = resolution.y * 0.5 - cameraOffsetY;\n"
         "    float row = horizon - gl_FragCoord.y;\n"
         "    if (row <= 0.0) discard;\n"
-        "    float distance = horizon / row;\n"
+        "    float distance = (resolution.y * 0.5) / row;\n"
         "    float cameraX = 2.0 * gl_FragCoord.x / resolution.x - 1.0;\n"
         "    vec2 ray = direction + cameraPlane * cameraX;\n"
         "    vec2 worldPosition = playerPosition + ray * distance;\n"
@@ -168,6 +172,7 @@ bool glRendererInitialize(void) {
         && LOAD_GL_FUNCTION(pglUseProgram, "glUseProgram")
         && LOAD_GL_FUNCTION(pglGetUniformLocation, "glGetUniformLocation")
         && LOAD_GL_FUNCTION(pglUniform1i, "glUniform1i")
+        && LOAD_GL_FUNCTION(pglUniform1f, "glUniform1f")
         && LOAD_GL_FUNCTION(pglUniform2f, "glUniform2f")
         && LOAD_GL_FUNCTION_ALIAS(pglGenFramebuffers,
             "glGenFramebuffers", "glGenFramebuffersEXT")
@@ -191,9 +196,11 @@ bool glRendererInitialize(void) {
     floorPositionUniform = pglGetUniformLocation(floorProgram, "playerPosition");
     floorDirectionUniform = pglGetUniformLocation(floorProgram, "direction");
     floorPlaneUniform = pglGetUniformLocation(floorProgram, "cameraPlane");
+    floorCameraOffsetUniform = pglGetUniformLocation(floorProgram, "cameraOffsetY");
     floorResolutionUniform = pglGetUniformLocation(floorProgram, "resolution");
     if (floorTextureUniform < 0 || floorPositionUniform < 0 || floorDirectionUniform < 0
-        || floorPlaneUniform < 0 || floorResolutionUniform < 0) {
+        || floorPlaneUniform < 0 || floorCameraOffsetUniform < 0
+        || floorResolutionUniform < 0) {
         fprintf(stderr, "Failed to get floor shader uniforms.\n");
         glRendererShutdown();
         return false;
@@ -351,13 +358,14 @@ void glBeginRenderTarget(const GLRenderTarget *target) {
 
 void glDrawFloor(GLuint texture, double playerX, double playerY,
     double directionX, double directionY, double planeX, double planeY,
-    int width, int height) {
+    double cameraOffsetY, int width, int height) {
     pglUseProgram(floorProgram);
     glBindTexture(GL_TEXTURE_2D, texture);
     pglUniform1i(floorTextureUniform, 0);
     pglUniform2f(floorPositionUniform, (GLfloat)playerX, (GLfloat)playerY);
     pglUniform2f(floorDirectionUniform, (GLfloat)directionX, (GLfloat)directionY);
     pglUniform2f(floorPlaneUniform, (GLfloat)planeX, (GLfloat)planeY);
+    pglUniform1f(floorCameraOffsetUniform, (GLfloat)cameraOffsetY);
     pglUniform2f(floorResolutionUniform, (GLfloat)width, (GLfloat)height);
     glDisable(GL_BLEND);
     glColor4ub(255, 255, 255, 255);

@@ -13,7 +13,8 @@ typedef struct {
     double dirY;
     double planeX;
     double planeY;
-    double planyZ;
+    double bobPhase;
+    double cameraBob;
 } Player;
 
 extern const int worldMap[MAP_HEIGHT][MAP_WIDTH];

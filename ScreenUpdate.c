@@ -396,8 +396,9 @@ bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTex
         return false;
     }
 
+    double cameraOffsetY = player->cameraBob * renderHeight;
     glDrawFloor(wallTexture, player->x, player->y, player->dirX, player->dirY,
-        player->planeX, player->planeY, renderWidth, renderHeight);
+        player->planeX, player->planeY, cameraOffsetY, renderWidth, renderHeight);
 
     for (int x = 0; x < renderWidth; x++) {
         zBuffer[x] = INFINITY;
@@ -483,7 +484,7 @@ bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTex
             lineHeight = 1;
         }
 
-        int projectedStart = renderHeight / 2 - lineHeight / 2;
+        int projectedStart = (int)(renderHeight / 2 - lineHeight / 2 + cameraOffsetY);
         int projectedEnd = projectedStart + lineHeight;
         int drawStart = projectedStart < 0 ? 0 : projectedStart;
         int drawEnd = projectedEnd > renderHeight ? renderHeight : projectedEnd;
@@ -562,7 +563,7 @@ bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTex
             * (double)enemy->textureWidth / enemy->textureHeight);
         if (spriteWidth > 0 && spriteHeight > 0) {
             int spriteLeft = screenX - spriteWidth / 2;
-            int spriteTop = renderHeight / 2 - spriteHeight / 2;
+            int spriteTop = (int)(renderHeight / 2 - spriteHeight / 2 + cameraOffsetY);
             int firstX = spriteLeft < 0 ? 0 : spriteLeft;
             int endX = spriteLeft + spriteWidth;
             if (endX > renderWidth) {

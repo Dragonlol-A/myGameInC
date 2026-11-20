@@ -21,7 +21,7 @@ void glDestroyRenderTarget(GLRenderTarget *target);
 void glBeginRenderTarget(const GLRenderTarget *target);
 void glDrawFloor(GLuint texture, double playerX, double playerY,
     double directionX, double directionY, double planeX, double planeY,
-    int width, int height);
+    double cameraOffsetY, int width, int height);
 void glPresentRenderTarget(const GLRenderTarget *target, int outputWidth, int outputHeight);
 void glSet2DProjection(int width, int height);
 void glSetLogicalProjection(int viewportWidth, int viewportHeight,

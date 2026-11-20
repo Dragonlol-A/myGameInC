@@ -1,0 +1,21 @@
+{
+    "configurations": [
+        {
+            "name": "Windows MinGW",
+            "compilerPath": "/usr/bin/x86_64-w64-mingw32-gcc",
+            "cStandard": "c17",
+            "intelliSenseMode": "windows-gcc-x64",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/SDL2_for_windows/SDL2-2.32.2/x86_64-w64-mingw32/include",
+                "${workspaceFolder}/SDL2_for_windows/SDL2-2.32.2/x86_64-w64-mingw32/include/SDL2",
+                "${workspaceFolder}/SDL2_for_windows/SDL2_image-2.8.12/x86_64-w64-mingw32/include",
+                "${workspaceFolder}/SDL2_for_windows/SDL2_image-2.8.12/x86_64-w64-mingw32/include/SDL2"
+            ],
+            "defines": [
+                "main=SDL_main"
+            ]
+        }
+    ],
+    "version": 4
+}

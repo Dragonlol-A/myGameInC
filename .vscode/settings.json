@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "/home/dragonlol/myGameInC/SDL2_for_windows/SDL2-2.32.2/test"
+    "C_Cpp.default.configurationProvider": null,
+    "C_Cpp.default.compilerPath": "/usr/bin/x86_64-w64-mingw32-gcc"
 }

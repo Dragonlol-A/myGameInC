@@ -64,7 +64,7 @@ void updatePlayer(Player *player, const int map[MAP_HEIGHT][MAP_WIDTH], double f
     }
 }
 
-void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture *woodenMacheteTexture, SDL_Renderer *renderer, int renderWidth, int renderHeight, double deltaTime) {
+void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture *woodenMacheteTexture, SDL_Texture *weaponSlashTexture, SDL_Renderer *renderer, int renderWidth, int renderHeight, double deltaTime, bool attacking, double attackProgress) {
     double targetAmount = walking ? 1.0 : 0.0;
 
     bobAmount += (targetAmount - bobAmount) * fmin(1.0, deltaTime * 8.0);
@@ -89,5 +89,53 @@ void waponMovement(bool walking, double bobPhase, double bobAmount, SDL_Texture 
         weaponHeight
     };
 
-    SDL_RenderCopy(renderer, woodenMacheteTexture, NULL, &handDestination);
+    double swingAngle = 0.0;
+    double progressArc = 0.0;
+    if (attacking) {
+        double progress = fmin(1.0, fmax(0.0, attackProgress));
+        if (progress < 0.2) {
+            double anticipation = progress / 0.2;
+            anticipation = anticipation * anticipation * (3.0 - 2.0 * anticipation);
+            swingAngle = 50.0 * anticipation;
+        } else if (progress < 0.75) {
+            double slashProgress = (progress - 0.2) / 0.55;
+            slashProgress = slashProgress * slashProgress * (3.0 - 2.0 * slashProgress);
+            swingAngle = 50.0 - 110.0 * slashProgress;
+        } else {
+            double recovery = (progress - 0.75) / 0.25;
+            recovery = recovery * recovery * (3.0 - 2.0 * recovery);
+            swingAngle = -60.0 * (1.0 - recovery);
+        }
+
+        progressArc = sin(progress * 3.14159265358979323846);
+        handDestination.x -= (int)(50.0 * scale * progressArc);
+        handDestination.y -= (int)(90.0 * scale * progressArc);
+        
+    }
+
+    SDL_Point pivot = {weaponWidth / 2, weaponHeight * 9 / 10};
+    if (attacking) {
+        SDL_RenderCopyEx(renderer, woodenMacheteTexture, NULL, &handDestination,
+            swingAngle, &pivot, SDL_FLIP_NONE);
+    } else {
+        SDL_RenderCopy(renderer, woodenMacheteTexture, NULL, &handDestination);
+    }
+
+    if (attacking && attackProgress >= 0.4 && attackProgress <= 0.85) {
+        double slashProgress = (attackProgress - 0.2) / 0.55;
+        double fade = fmin(slashProgress / 0.2, (1.0 - slashProgress) / 0.2);
+        fade = fmax(0.0, fmin(1.0, fade));
+        SDL_SetTextureAlphaMod(weaponSlashTexture, (Uint8)(220.0 * fade));
+
+        int slashSize = (int)(renderHeight * 0.78);
+        SDL_Rect slashDestination = {
+            renderWidth / 2 - slashSize / 2 - (int)(renderWidth * 0.04 * progressArc),
+            renderHeight / 2 - slashSize / 2 - (int)(renderHeight * 0.08 * progressArc),
+            slashSize,
+            slashSize
+        };
+        SDL_RenderCopyEx(renderer, weaponSlashTexture, NULL, &slashDestination,
+            -45.0 + 90.0 * slashProgress, NULL, SDL_FLIP_NONE);
+        SDL_SetTextureAlphaMod(weaponSlashTexture, 255);
+    }
 }

@@ -40,9 +40,18 @@ int main(int argc, char *argv[]) {
     SDL_Texture *theBestWallTexture = loadTextures(renderer, "assets/theBestWall.png");
     SDL_Texture *enemyTexture = loadTextures(renderer, "assets/grinch.png");
     SDL_Texture *woodenMacheteTexture = loadTextures(renderer, "assets/wood_machete.png");
+    SDL_Texture *weaponSlashTexture = loadTextures(renderer, "assets/waponSlash.png");
     SDL_Texture *settingsButtonTexture = loadTextures(renderer, "assets/SettingsButton.png");
-    if (defaultWallTexture == NULL || theBestWallTexture == NULL || enemyTexture == NULL || woodenMacheteTexture == NULL || settingsButtonTexture == NULL) {
+    if (defaultWallTexture == NULL || theBestWallTexture == NULL || enemyTexture == NULL
+        || woodenMacheteTexture == NULL || weaponSlashTexture == NULL
+        || settingsButtonTexture == NULL) {
         fprintf(stderr, "Failed to load one or more textures.\n");
+        if (defaultWallTexture != NULL) SDL_DestroyTexture(defaultWallTexture);
+        if (theBestWallTexture != NULL) SDL_DestroyTexture(theBestWallTexture);
+        if (enemyTexture != NULL) SDL_DestroyTexture(enemyTexture);
+        if (woodenMacheteTexture != NULL) SDL_DestroyTexture(woodenMacheteTexture);
+        if (weaponSlashTexture != NULL) SDL_DestroyTexture(weaponSlashTexture);
+        if (settingsButtonTexture != NULL) SDL_DestroyTexture(settingsButtonTexture);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -50,17 +59,23 @@ int main(int argc, char *argv[]) {
     }
     
     SDL_SetTextureBlendMode(woodenMacheteTexture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureBlendMode(weaponSlashTexture, SDL_BLENDMODE_BLEND);
 
     double bobPhase = 0.0;
     double bobAmount = 0.0;
+    const double attackDuration = 0.42;
+    const double attackCooldownDuration = 0.65;
+    double attackTimer = 0.0;
+    double attackCooldownTimer = 0.0;
 
     if (SDL_QueryTexture(defaultWallTexture, NULL, NULL, &textureWidth, &textureHeight) != 0) {
         fprintf(stderr, "SDL_QueryTexture Error: %s\n", SDL_GetError());
-        SDL_DestroyTexture(defaultWallTexture);
-        SDL_DestroyTexture(theBestWallTexture);
-        SDL_DestroyTexture(enemyTexture);
-        SDL_DestroyTexture(woodenMacheteTexture);
-        SDL_DestroyTexture(settingsButtonTexture);
+        if (defaultWallTexture != NULL) SDL_DestroyTexture(defaultWallTexture);
+        if (theBestWallTexture != NULL) SDL_DestroyTexture(theBestWallTexture);
+        if (enemyTexture != NULL) SDL_DestroyTexture(enemyTexture);
+        if (woodenMacheteTexture != NULL) SDL_DestroyTexture(woodenMacheteTexture);
+        if (weaponSlashTexture != NULL) SDL_DestroyTexture(weaponSlashTexture);
+        if (settingsButtonTexture != NULL) SDL_DestroyTexture(settingsButtonTexture);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -73,6 +88,15 @@ int main(int argc, char *argv[]) {
     int enemyWidth, enemyHeight;
     if (SDL_QueryTexture(enemyTexture, NULL, NULL, &enemyWidth, &enemyHeight) != 0) {
         fprintf(stderr, "SDL_QueryTexture enemy Error: %s\n", SDL_GetError());
+        SDL_DestroyTexture(defaultWallTexture);
+        SDL_DestroyTexture(theBestWallTexture);
+        SDL_DestroyTexture(enemyTexture);
+        SDL_DestroyTexture(woodenMacheteTexture);
+        SDL_DestroyTexture(weaponSlashTexture);
+        SDL_DestroyTexture(settingsButtonTexture);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
         return 1;
     }
 
@@ -86,6 +110,7 @@ int main(int argc, char *argv[]) {
     Uint64 previousCounter = SDL_GetPerformanceCounter();
     const double counterFrequency = (double)SDL_GetPerformanceFrequency();
     //set the mouse to relative mode to capture mouse movement (hide the cursor and get relative motion)
+
     SDL_SetRelativeMouseMode(SDL_TRUE);
     while (running) {
         SDL_Event event;
@@ -96,6 +121,17 @@ int main(int argc, char *argv[]) {
                 running = false;
             } else if (event.type == SDL_MOUSEMOTION) {
                 mouseDeltaX -= event.motion.xrel;
+            } else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+                if (attackCooldownTimer <= 0.0 && attackTimer <= 0.0) {
+                    attackTimer = attackDuration;
+                    attackCooldownTimer = attackCooldownDuration;
+                }
+            } else if (event.type == SDL_KEYDOWN && !event.key.repeat
+                && event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                if (attackCooldownTimer <= 0.0 && attackTimer <= 0.0) {
+                    attackTimer = attackDuration;
+                    attackCooldownTimer = attackCooldownDuration;
+                }
             }
         }
 
@@ -114,10 +150,16 @@ int main(int argc, char *argv[]) {
         }
         if (!running) break;
 
+        attackTimer = fmax(0.0, attackTimer - deltaTime);
+        attackCooldownTimer = fmax(0.0, attackCooldownTimer - deltaTime);
+        bool attacking = attackTimer > 0.0;
+        double attackProgress = attacking ? 1.0 - attackTimer / attackDuration : 0.0;
+
         int renderWidth;
         int renderHeight;
         getRenderResolution(&renderWidth, &renderHeight);
-        if (sceneTexture == NULL || renderWidth != sceneTextureWidth || renderHeight != sceneTextureHeight) {
+        if (sceneTexture == NULL || renderWidth != sceneTextureWidth
+            || renderHeight != sceneTextureHeight) {
             SDL_Texture *newSceneTexture = SDL_CreateTexture(
                 renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET,
                 renderWidth, renderHeight);
@@ -132,6 +174,7 @@ int main(int argc, char *argv[]) {
                 running = false;
                 break;
             }
+
             if (sceneTexture != NULL) {
                 SDL_DestroyTexture(sceneTexture);
             }
@@ -151,13 +194,15 @@ int main(int argc, char *argv[]) {
             running = false;
             break;
         }
-        bool sceneRendered = renderScene(renderer, &player, defaultWallTexture, theBestWallTexture,
-            &enemy, textureWidth, textureHeight, renderWidth, renderHeight, worldMap);
+        bool sceneRendered = renderScene(renderer, &player, defaultWallTexture,
+            theBestWallTexture, &enemy, textureWidth, textureHeight,
+            renderWidth, renderHeight, worldMap);
         
         if (walking) bobPhase += deltaTime * 10.0;
         if (sceneRendered) {
-            waponMovement(walking, bobPhase, bobAmount, woodenMacheteTexture, renderer,
-                renderWidth, renderHeight, deltaTime);
+            waponMovement(walking, bobPhase, bobAmount, woodenMacheteTexture,
+                weaponSlashTexture, renderer, renderWidth, renderHeight,
+                deltaTime, attacking, attackProgress);
         }
 
         if (SDL_SetRenderTarget(renderer, NULL) != 0) {
@@ -182,6 +227,7 @@ int main(int argc, char *argv[]) {
     SDL_DestroyTexture(theBestWallTexture);
     SDL_DestroyTexture(enemy.texture);
     SDL_DestroyTexture(woodenMacheteTexture);
+    SDL_DestroyTexture(weaponSlashTexture);
     SDL_DestroyTexture(settingsButtonTexture);
     SDL_DestroyTexture(sceneTexture);
     SDL_DestroyRenderer(renderer);

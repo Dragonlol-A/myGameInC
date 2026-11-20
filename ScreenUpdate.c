@@ -2,6 +2,8 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <stdint.h>
 #include <SDL2/SDL_image.h>
 #include "ScreenUpdate.h"
 
@@ -149,8 +151,7 @@ static int openResolutionSettings(SDL_Renderer *renderer, SDL_Window *gameWindow
         SDL_RenderDrawRect(renderer, &dropdown);
 
         char resolutionLabel[32];
-        snprintf(resolutionLabel, sizeof(resolutionLabel), "%dx%d",
-            resolutions[resolutionIndex].x, resolutions[resolutionIndex].y);
+        snprintf(resolutionLabel, sizeof(resolutionLabel), "%dx%d", resolutions[resolutionIndex].x, resolutions[resolutionIndex].y);
         setDrawColor(renderer, 255, 255, 255);
         drawBitmapText(renderer, resolutionLabel, dropdownX + 16, dropdownY + 18, 5);
         SDL_RenderDrawLine(renderer, dropdownX + dropdownWidth - 34, dropdownY + 23,
@@ -343,6 +344,156 @@ SDL_Texture *loadTextures(SDL_Renderer *renderer, const char *texturePath) {
     return wallTexture;
 }
 
+static bool drawTexturedFloor(SDL_Renderer *renderer, const Player *player,
+    SDL_Texture *floorTexture, int renderWidth, int renderHeight) {
+    int floorHeight = renderHeight - renderHeight / 2;
+    double rayDirX0 = player->dirX - player->planeX;
+    double rayDirY0 = player->dirY - player->planeY;
+    double rayDirX1 = player->dirX + player->planeX;
+    double rayDirY1 = player->dirY + player->planeY;
+    double stepHeight = 0.5 * renderHeight;
+    size_t maxQuads = 0;
+
+    for (int y = 0; y < floorHeight; y++) {
+        double rowDistance = stepHeight / (y + 1);
+        double worldWidthX = rowDistance * (rayDirX1 - rayDirX0);
+        double worldWidthY = rowDistance * (rayDirY1 - rayDirY0);
+        size_t rowQuads = (size_t)ceil(fabs(worldWidthX)) + (size_t)ceil(fabs(worldWidthY)) + 1;
+        if (rowQuads > SIZE_MAX - maxQuads) {
+            fprintf(stderr, "Floor geometry is too large.\n");
+            return false;
+        }
+        maxQuads += rowQuads;
+    }
+
+    if (maxQuads > (size_t)INT_MAX / 6 || maxQuads > SIZE_MAX / (4 * sizeof(SDL_Vertex)) || maxQuads > SIZE_MAX / (6 * sizeof(int))) {
+        fprintf(stderr, "Floor geometry is too large.\n");
+        return false;
+    }
+
+    SDL_Vertex *vertices = malloc(maxQuads * 4 * sizeof(*vertices));
+    int *indices = malloc(maxQuads * 6 * sizeof(*indices));
+    if (vertices == NULL || indices == NULL) {
+        fprintf(stderr, "Failed to allocate floor geometry.\n");
+        free(vertices);
+        free(indices);
+        return false;
+    }
+
+    int vertexCount = 0;
+    int indexCount = 0;
+
+    for (int y = 0; y < floorHeight; y++) {
+        double rowDistance = stepHeight / (y + 1);
+        double startX = player->x + rowDistance * rayDirX0;
+        double startY = player->y + rowDistance * rayDirY0;
+        double deltaX = rowDistance * (rayDirX1 - rayDirX0);
+        double deltaY = rowDistance * (rayDirY1 - rayDirY0);
+        double nextX = INFINITY;
+        double nextY = INFINITY;
+        double stepTX = INFINITY;
+        double stepTY = INFINITY;
+
+        if (deltaX > 0.0) {
+            nextX = (floor(startX) + 1.0 - startX) / deltaX;
+            stepTX = 1.0 / deltaX;
+        } else if (deltaX < 0.0) {
+            nextX = (ceil(startX) - 1.0 - startX) / deltaX;
+            stepTX = -1.0 / deltaX;
+        }
+        if (deltaY > 0.0) {
+            nextY = (floor(startY) + 1.0 - startY) / deltaY;
+            stepTY = 1.0 / deltaY;
+        } else if (deltaY < 0.0) {
+            nextY = (ceil(startY) - 1.0 - startY) / deltaY;
+            stepTY = -1.0 / deltaY;
+        }
+
+        double currentT = 0.0;
+        while (currentT < 1.0) {
+            double endT = fmin(1.0, fmin(nextX, nextY));
+            double middleT = (currentT + endT) * 0.5;
+            double tileX = floor(startX + deltaX * middleT);
+            double tileY = floor(startY + deltaY * middleT);
+            double u0 = startX + deltaX * currentT - tileX;
+            double v0 = startY + deltaY * currentT - tileY;
+            double u1 = startX + deltaX * endT - tileX;
+            double v1 = startY + deltaY * endT - tileY;
+            float textureU0 = (float)fmax(0.0, fmin(1.0, u0));
+            float textureV0 = (float)fmax(0.0, fmin(1.0, v0));
+            float textureU1 = (float)fmax(0.0, fmin(1.0, u1));
+            float textureV1 = (float)fmax(0.0, fmin(1.0, v1));
+
+            SDL_Color white = {255, 255, 255, 255};
+            float screenX0 = (float)(currentT * renderWidth);
+            float screenX1 = (float)(endT * renderWidth);
+            float screenY0 = (float)(renderHeight / 2 + y);
+            float screenY1 = screenY0 + 1.0f;
+            int baseVertex = vertexCount;
+
+            vertices[vertexCount++] = (SDL_Vertex){
+                {screenX0, screenY0}, white, {textureU0, textureV0}
+            };
+            vertices[vertexCount++] = (SDL_Vertex){
+                {screenX1, screenY0}, white, {textureU1, textureV1}
+            };
+            vertices[vertexCount++] = (SDL_Vertex){
+                {screenX1, screenY1}, white, {textureU1, textureV1}
+            };
+            vertices[vertexCount++] = (SDL_Vertex){
+                {screenX0, screenY1}, white, {textureU0, textureV0}
+            };
+            indices[indexCount++] = baseVertex;
+            indices[indexCount++] = baseVertex + 1;
+            indices[indexCount++] = baseVertex + 2;
+            indices[indexCount++] = baseVertex;
+            indices[indexCount++] = baseVertex + 2;
+            indices[indexCount++] = baseVertex + 3;
+
+            if (endT >= 1.0) {
+                break;
+            }
+            currentT = endT;
+            if (nextX <= endT) {
+                nextX += stepTX;
+            }
+            if (nextY <= endT) {
+                nextY += stepTY;
+            }
+        }
+    }
+
+    SDL_BlendMode previousBlendMode;
+    if (SDL_GetTextureBlendMode(floorTexture, &previousBlendMode) != 0) {
+        fprintf(stderr, "SDL_GetTextureBlendMode floor Error: %s\n", SDL_GetError());
+        free(vertices);
+        free(indices);
+        return false;
+    }
+    if (SDL_SetTextureBlendMode(floorTexture, SDL_BLENDMODE_NONE) != 0
+        || SDL_SetTextureColorMod(floorTexture, 255, 255, 255) != 0) {
+        fprintf(stderr, "Failed to configure floor texture: %s\n", SDL_GetError());
+        SDL_SetTextureBlendMode(floorTexture, previousBlendMode);
+        free(vertices);
+        free(indices);
+        return false;
+    }
+
+    bool rendered = SDL_RenderGeometry(renderer, floorTexture, vertices,
+        vertexCount, indices, indexCount) == 0;
+    if (!rendered) {
+        fprintf(stderr, "SDL_RenderGeometry floor Error: %s\n", SDL_GetError());
+    }
+    bool restored = SDL_SetTextureBlendMode(floorTexture, previousBlendMode) == 0;
+    if (!restored) {
+        fprintf(stderr, "SDL_SetTextureBlendMode restore Error: %s\n", SDL_GetError());
+    }
+
+    free(vertices);
+    free(indices);
+    return rendered && restored;
+}
+
 bool renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wallTexture, SDL_Texture *theBestWallTexture, const Enemy *enemy, int textureWidth, int textureHeight, int renderWidth, int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH]) {
     if (renderWidth <= 0 || renderHeight <= 0) {
         fprintf(stderr, "Renderer output size is invalid: %d x %d\n", renderWidth, renderHeight);
@@ -360,8 +511,12 @@ bool renderScene(SDL_Renderer *renderer, const Player *player, SDL_Texture *wall
     SDL_RenderFillRect(renderer, &ceiling);
 
     setDrawColor(renderer, 62, 54, 45);
-    SDL_Rect floorRect = {0, renderHeight / 2, renderWidth, renderHeight / 2};
+    SDL_Rect floorRect = {0, renderHeight / 2, renderWidth, renderHeight - renderHeight / 2};
     SDL_RenderFillRect(renderer, &floorRect);
+    if (!drawTexturedFloor(renderer, player, wallTexture, renderWidth, renderHeight)) {
+        free(zBuffer);
+        return false;
+    }
 
     for (int x = 0; x < renderWidth; x++) {
         zBuffer[x] = INFINITY;

@@ -1,4 +1,4 @@
 {
     "C_Cpp.default.configurationProvider": null,
-    "C_Cpp.default.compilerPath": "/usr/bin/x86_64-w64-mingw32-gcc"
+    "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
 #include <math.h>
 #include "ScreenUpdate.h"
 #include "player.h"
@@ -19,22 +20,18 @@ int main(int argc, char *argv[]) {
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2"); //to avoid windows upscaling (mise à l'échelle)
     #endif
 
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
         fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
         return 1;
     }
 
-    if (SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2) != 0
-        || SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1) != 0
-        || SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1) != 0) {
+    if (SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2) != 0 || SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1) != 0 || SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1) != 0) {
         fprintf(stderr, "SDL_GL_SetAttribute Error: %s\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }
 
-    SDL_Window *window = SDL_CreateWindow("Raycasting Demo",
-        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
+    SDL_Window *window = SDL_CreateWindow("Raycasting Demo", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
     if (window == NULL) {
         fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
         SDL_Quit();
@@ -48,6 +45,7 @@ int main(int argc, char *argv[]) {
         SDL_Quit();
         return 1;
     }
+
     if (!glRendererInitialize()) {
         glRendererShutdown();
         SDL_GL_DeleteContext(glContext);
@@ -55,6 +53,7 @@ int main(int argc, char *argv[]) {
         SDL_Quit();
         return 1;
     }
+
     if (glSetSwapInterval(true) != 0) {
         fprintf(stderr, "SDL_GL_SetSwapInterval Error: %s\n", SDL_GetError());
     }
@@ -68,21 +67,43 @@ int main(int argc, char *argv[]) {
     GLuint defaultWallTexture = glLoadTexture("assets/wall.png", &textureWidth, &textureHeight);
     GLuint theBestWallTexture = glLoadTexture("assets/theBestWall.png", NULL, NULL);
     GLuint enemyTexture = glLoadTexture("assets/grinch.png", &enemyWidth, &enemyHeight);
-    GLuint woodenMacheteTexture = glLoadTexture(
-        "assets/wood_machete.png", &weaponTextureWidth, &weaponTextureHeight);
+    GLuint woodenMacheteTexture = glLoadTexture("assets/pistol1.png", &weaponTextureWidth, &weaponTextureHeight);
     GLuint weaponSlashTexture = glLoadTexture("assets/waponSlash.png", NULL, NULL);
     GLuint settingsButtonTexture = glLoadTexture("assets/SettingsButton.png", NULL, NULL);
-    if (defaultWallTexture == 0 || theBestWallTexture == 0 || enemyTexture == 0
-        || woodenMacheteTexture == 0 || weaponSlashTexture == 0
-        || settingsButtonTexture == 0) {
+    if (defaultWallTexture == 0 || theBestWallTexture == 0 || enemyTexture == 0 || woodenMacheteTexture == 0 || weaponSlashTexture == 0 || settingsButtonTexture == 0) {
         fprintf(stderr, "Failed to load one or more textures.\n");
-        glDeleteTexture(defaultWallTexture);
-        glDeleteTexture(theBestWallTexture);
-        glDeleteTexture(enemyTexture);
-        glDeleteTexture(woodenMacheteTexture);
-        glDeleteTexture(weaponSlashTexture);
-        glDeleteTexture(settingsButtonTexture);
-        glRendererShutdown();
+        destroyTextures(defaultWallTexture, theBestWallTexture, enemyTexture, woodenMacheteTexture, weaponSlashTexture, settingsButtonTexture);
+        SDL_GL_DeleteContext(glContext);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
+        fprintf(stderr, "Mix_OpenAudio Error: %s\n", Mix_GetError());
+        destroyTextures(defaultWallTexture, theBestWallTexture, enemyTexture, woodenMacheteTexture, weaponSlashTexture, settingsButtonTexture);
+        SDL_GL_DeleteContext(glContext);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    Mix_Music *music = Mix_LoadMUS("music/BeepBox-Song.wav");
+    if (music == NULL) {
+        fprintf(stderr, "Mix_LoadMUS Error: %s\n", Mix_GetError());
+        Mix_CloseAudio();
+        destroyTextures(defaultWallTexture, theBestWallTexture, enemyTexture, woodenMacheteTexture, weaponSlashTexture, settingsButtonTexture);
+        SDL_GL_DeleteContext(glContext);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    if (Mix_PlayMusic(music, -1) < 0) { /* -1 means loop indefinitely */
+        fprintf(stderr, "Mix_PlayMusic Error: %s\n", Mix_GetError());
+        Mix_FreeMusic(music);
+        Mix_CloseAudio();
+        destroyTextures(defaultWallTexture, theBestWallTexture, enemyTexture, woodenMacheteTexture, weaponSlashTexture, settingsButtonTexture);
         SDL_GL_DeleteContext(glContext);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -205,6 +226,9 @@ int main(int argc, char *argv[]) {
     glRendererShutdown();
     SDL_GL_DeleteContext(glContext);
     SDL_DestroyWindow(window);
+    Mix_HaltMusic();
+    Mix_FreeMusic(music);
+    Mix_CloseAudio();
     SDL_Quit();
     return 0;
 }

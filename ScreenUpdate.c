@@ -106,16 +106,13 @@ static void windowPointToLogical(SDL_Window *window, int windowX, int windowY,
     int drawableHeight;
     SDL_GetWindowSize(window, &windowWidth, &windowHeight);
     SDL_GL_GetDrawableSize(window, &drawableWidth, &drawableHeight);
-    if (windowWidth <= 0 || windowHeight <= 0
-        || drawableWidth <= 0 || drawableHeight <= 0
-        || logicalWidth <= 0 || logicalHeight <= 0) {
+    if (windowWidth <= 0 || windowHeight <= 0 || drawableWidth <= 0 || drawableHeight <= 0 || logicalWidth <= 0 || logicalHeight <= 0) {
         *logicalX = -1.0f;
         *logicalY = -1.0f;
         return;
     }
 
-    float scale = fminf((float)drawableWidth / logicalWidth,
-        (float)drawableHeight / logicalHeight);
+    float scale = fminf((float)drawableWidth / logicalWidth, (float)drawableHeight / logicalHeight);
     float viewportWidth = (float)(int)(logicalWidth * scale);
     float viewportHeight = (float)(int)(logicalHeight * scale);
     float offsetX = (drawableWidth - viewportWidth) * 0.5f;
@@ -366,6 +363,17 @@ static int openResolutionSettings(SDL_Window *gameWindow) {
     glSet2DProjection(drawableWidth, drawableHeight);
     updatePausedWindowTitle(gameWindow);
     return quitRequested;
+}
+
+void destroyTextures(GLuint defaultWallTexture, GLuint theBestWallTexture, GLuint enemyTexture, GLuint woodenMacheteTexture, GLuint weaponSlashTexture, GLuint settingsButtonTexture) {
+        glDeleteTexture(defaultWallTexture);
+        glDeleteTexture(theBestWallTexture);
+        glDeleteTexture(enemyTexture);
+        glDeleteTexture(woodenMacheteTexture);
+        glDeleteTexture(weaponSlashTexture);
+        glDeleteTexture(settingsButtonTexture);
+        glRendererShutdown();
+        return;
 }
 
 typedef struct {

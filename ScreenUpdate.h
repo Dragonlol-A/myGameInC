@@ -16,6 +16,9 @@ bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTex
     int renderWidth, int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH]);
 
 int openMenu(SDL_Window *window, GLuint settingsButtonTexture);
+
 void drawWeapon(bool walking, double bobPhase, double bobAmount, GLuint weaponTexture, int weaponTextureWidth, int weaponTextureHeight, GLuint slashTexture, int renderWidth, int renderHeight, double deltaTime, bool attacking, double attackProgress);
+
+void destroyTextures(GLuint defaultWallTexture, GLuint theBestWallTexture, GLuint enemyTexture, GLuint woodenMacheteTexture, GLuint weaponSlashTexture, GLuint settingsButtonTexture);
 
 #endif

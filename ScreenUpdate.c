@@ -618,7 +618,7 @@ void drawWeapon(bool walking, double bobPhase, double bobAmount,
     int bobY = (int)(sin(bobPhase) * 125.0 * bobAmount * scale);
     int weaponWidth = (int)(weaponTextureWidth * scale);
     int weaponHeight = (int)(weaponTextureHeight * scale);
-    float weaponX = (float)(3 * renderWidth / 4 - weaponWidth / 3 + bobX);
+    float weaponX = (float)(3 * renderWidth / 5 - weaponWidth / 3 + bobX);
     float weaponY = (float)(renderHeight / 4 - weaponHeight / 5 + bobY);
 
     double swingAngle = 0.0;

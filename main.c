@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
     GLuint defaultWallTexture = glLoadTexture("assets/wall.png", &textureWidth, &textureHeight);
     GLuint theBestWallTexture = glLoadTexture("assets/theBestWall.png", NULL, NULL);
     GLuint enemyTexture = glLoadTexture("assets/grinch.png", &enemyWidth, &enemyHeight);
-    GLuint woodenMacheteTexture = glLoadTexture("assets/pistol1.png", &weaponTextureWidth, &weaponTextureHeight);
+    GLuint woodenMacheteTexture = glLoadTexture("assets/wgPix.png", &weaponTextureWidth, &weaponTextureHeight);
     GLuint weaponSlashTexture = glLoadTexture("assets/waponSlash.png", NULL, NULL);
     GLuint settingsButtonTexture = glLoadTexture("assets/SettingsButton.png", NULL, NULL);
     if (defaultWallTexture == 0 || theBestWallTexture == 0 || enemyTexture == 0 || woodenMacheteTexture == 0 || weaponSlashTexture == 0 || settingsButtonTexture == 0) {

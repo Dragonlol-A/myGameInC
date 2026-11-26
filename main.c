@@ -14,8 +14,7 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #endif
 
 int main(int argc, char *argv[]) {
-    const char *modelPath = argc > 1
-        ? argv[1] : "assets/3dAssets/gnome/garden_gnome_4k.gltf";
+    const char *modelPath = "assets/3dAssets/gnome/garden_gnome_4k.gltf";
 
     #ifdef _WIN32
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2"); //to avoid windows upscaling (mise à l'échelle)

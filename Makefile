@@ -1,6 +1,6 @@
 CC := gcc
 TARGET := game
-SRC := main.c ScreenUpdate.c player.c enemy.c gl_renderer.c
+SRC := main.c ScreenUpdate.c player.c enemy.c gl_renderer.c model.c gltf_model.c
 
 CFLAGS = $(shell pkg-config --cflags sdl2 SDL2_image SDL2_mixer) -Wall -Wextra
 LDLIBS = $(shell pkg-config --libs sdl2 SDL2_image SDL2_mixer gl) -lm

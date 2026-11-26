@@ -6,6 +6,7 @@
 #include "ScreenUpdate.h"
 #include "player.h"
 #include "enemy.h"
+#include "model.h"
 
 #ifdef _WIN32
 __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
@@ -13,8 +14,8 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #endif
 
 int main(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+    const char *modelPath = argc > 1
+        ? argv[1] : "assets/3dAssets/gnome/garden_gnome_4k.gltf";
 
     #ifdef _WIN32
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2"); //to avoid windows upscaling (mise à l'échelle)
@@ -110,6 +111,25 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    Model propModel = {0};
+    if (!modelLoad(&propModel, modelPath)) {
+        Mix_HaltMusic();
+        Mix_FreeMusic(music);
+        Mix_CloseAudio();
+        destroyTextures(defaultWallTexture, theBestWallTexture, enemyTexture, woodenMacheteTexture, weaponSlashTexture, settingsButtonTexture);
+        glRendererShutdown();
+        SDL_GL_DeleteContext(glContext);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+    ModelInstance propInstance = {
+        &propModel,
+        3.5,
+        2.8,
+        0.3f
+    };
+
     double bobAmount = 0.0;
     const double attackDuration = 0.42;
     const double attackCooldownDuration = 0.65;
@@ -192,7 +212,7 @@ int main(int argc, char *argv[]) {
         glBeginRenderTarget(&sceneTarget);
         bool sceneRendered = renderScene(&player, defaultWallTexture,
             theBestWallTexture, &enemy, textureWidth, textureHeight,
-            renderWidth, renderHeight, worldMap);
+            renderWidth, renderHeight, worldMap, &propInstance);
         
         if (sceneRendered) {
             drawWeapon(walking, player.bobPhase, bobAmount, woodenMacheteTexture,
@@ -217,6 +237,7 @@ int main(int argc, char *argv[]) {
     }
 
     glDestroyRenderTarget(&sceneTarget);
+    modelDestroy(&propModel);
     glDeleteTexture(defaultWallTexture);
     glDeleteTexture(theBestWallTexture);
     glDeleteTexture(enemy.texture);

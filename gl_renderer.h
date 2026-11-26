@@ -2,12 +2,14 @@
 #define GL_RENDERER_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 
 typedef struct {
     GLuint framebuffer;
     GLuint texture;
+    GLuint depthBuffer;
     int width;
     int height;
 } GLRenderTarget;
@@ -15,6 +17,7 @@ typedef struct {
 bool glRendererInitialize(void);
 void glRendererShutdown(void);
 GLuint glLoadTexture(const char *path, int *width, int *height);
+GLuint glLoadTextureFromMemory(const void *imageData, size_t imageSize);
 void glDeleteTexture(GLuint texture);
 bool glCreateRenderTarget(GLRenderTarget *target, int width, int height);
 void glDestroyRenderTarget(GLRenderTarget *target);
@@ -24,6 +27,7 @@ void glDrawFloor(GLuint texture, double playerX, double playerY,
     double cameraOffsetY, int width, int height);
 void glPresentRenderTarget(const GLRenderTarget *target, int outputWidth, int outputHeight);
 void glSet2DProjection(int width, int height);
+GLfloat glDepthZFromDistance(double distance);
 void glSetLogicalProjection(int viewportWidth, int viewportHeight,
     int logicalWidth, int logicalHeight);
 void glRendererClear(Uint8 red, Uint8 green, Uint8 blue);

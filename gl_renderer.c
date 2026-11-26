@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <SDL2/SDL_image.h>
 #include "gl_renderer.h"
 
@@ -31,6 +32,13 @@ typedef void (APIENTRYP GLBindFramebufferProc)(GLenum target, GLuint framebuffer
 typedef void (APIENTRYP GLFramebufferTexture2DProc)(GLenum target, GLenum attachment,
     GLenum textarget, GLuint texture, GLint level);
 typedef GLenum (APIENTRYP GLCheckFramebufferStatusProc)(GLenum target);
+typedef void (APIENTRYP GLGenRenderbuffersProc)(GLsizei n, GLuint *renderbuffers);
+typedef void (APIENTRYP GLDeleteRenderbuffersProc)(GLsizei n, const GLuint *renderbuffers);
+typedef void (APIENTRYP GLBindRenderbufferProc)(GLenum target, GLuint renderbuffer);
+typedef void (APIENTRYP GLRenderbufferStorageProc)(GLenum target, GLenum internalformat,
+    GLsizei width, GLsizei height);
+typedef void (APIENTRYP GLFramebufferRenderbufferProc)(GLenum target, GLenum attachment,
+    GLenum renderbufferTarget, GLuint renderbuffer);
 
 static GLCreateShaderProc pglCreateShader;
 static GLShaderSourceProc pglShaderSource;
@@ -54,6 +62,11 @@ static GLDeleteFramebuffersProc pglDeleteFramebuffers;
 static GLBindFramebufferProc pglBindFramebuffer;
 static GLFramebufferTexture2DProc pglFramebufferTexture2D;
 static GLCheckFramebufferStatusProc pglCheckFramebufferStatus;
+static GLGenRenderbuffersProc pglGenRenderbuffers;
+static GLDeleteRenderbuffersProc pglDeleteRenderbuffers;
+static GLBindRenderbufferProc pglBindRenderbuffer;
+static GLRenderbufferStorageProc pglRenderbufferStorage;
+static GLFramebufferRenderbufferProc pglFramebufferRenderbuffer;
 
 static GLuint floorProgram;
 static GLint floorTextureUniform;
@@ -183,7 +196,17 @@ bool glRendererInitialize(void) {
         && LOAD_GL_FUNCTION_ALIAS(pglFramebufferTexture2D,
             "glFramebufferTexture2D", "glFramebufferTexture2DEXT")
         && LOAD_GL_FUNCTION_ALIAS(pglCheckFramebufferStatus,
-            "glCheckFramebufferStatus", "glCheckFramebufferStatusEXT");
+            "glCheckFramebufferStatus", "glCheckFramebufferStatusEXT")
+        && LOAD_GL_FUNCTION_ALIAS(pglGenRenderbuffers,
+            "glGenRenderbuffers", "glGenRenderbuffersEXT")
+        && LOAD_GL_FUNCTION_ALIAS(pglDeleteRenderbuffers,
+            "glDeleteRenderbuffers", "glDeleteRenderbuffersEXT")
+        && LOAD_GL_FUNCTION_ALIAS(pglBindRenderbuffer,
+            "glBindRenderbuffer", "glBindRenderbufferEXT")
+        && LOAD_GL_FUNCTION_ALIAS(pglRenderbufferStorage,
+            "glRenderbufferStorage", "glRenderbufferStorageEXT")
+        && LOAD_GL_FUNCTION_ALIAS(pglFramebufferRenderbuffer,
+            "glFramebufferRenderbuffer", "glFramebufferRenderbufferEXT");
     if (!loaded) {
         return false;
     }
@@ -207,6 +230,7 @@ bool glRendererInitialize(void) {
     }
 
     glDisable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -266,6 +290,56 @@ GLuint glLoadTexture(const char *path, int *width, int *height) {
     return texture;
 }
 
+GLuint glLoadTextureFromMemory(const void *imageData, size_t imageSize) {
+    if (imageData == NULL || imageSize == 0 || imageSize > INT_MAX) {
+        fprintf(stderr, "Invalid in-memory texture data.\n");
+        return 0;
+    }
+
+    SDL_RWops *imageStream = SDL_RWFromConstMem(imageData, (int)imageSize);
+    if (imageStream == NULL) {
+        fprintf(stderr, "SDL_RWFromConstMem Error: %s\n", SDL_GetError());
+        return 0;
+    }
+    SDL_Surface *loadedSurface = IMG_Load_RW(imageStream, 1);
+    if (loadedSurface == NULL) {
+        fprintf(stderr, "IMG_Load_RW Error: %s\n", IMG_GetError());
+        return 0;
+    }
+    SDL_Surface *surface = SDL_ConvertSurfaceFormat(
+        loadedSurface, SDL_PIXELFORMAT_RGBA32, 0);
+    SDL_FreeSurface(loadedSurface);
+    if (surface == NULL) {
+        fprintf(stderr, "SDL_ConvertSurfaceFormat Error: %s\n", SDL_GetError());
+        return 0;
+    }
+
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    if (texture == 0) {
+        fprintf(stderr, "glGenTextures Error while loading embedded texture\n");
+        SDL_FreeSurface(surface);
+        return 0;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, surface->w, surface->h,
+        0, GL_RGBA, GL_UNSIGNED_BYTE, surface->pixels);
+    GLenum error = glGetError();
+    SDL_FreeSurface(surface);
+    if (error != GL_NO_ERROR) {
+        fprintf(stderr, "OpenGL embedded texture upload failed: 0x%x\n", error);
+        glDeleteTextures(1, &texture);
+        return 0;
+    }
+    return texture;
+}
+
 void glDeleteTexture(GLuint texture) {
     if (texture != 0) {
         glDeleteTextures(1, &texture);
@@ -292,6 +366,16 @@ bool glCreateRenderTarget(GLRenderTarget *target, int width, int height) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height,
         0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
+    pglGenRenderbuffers(1, &target->depthBuffer);
+    if (target->depthBuffer == 0) {
+        fprintf(stderr, "glGenRenderbuffers Error\n");
+        glDestroyRenderTarget(target);
+        return false;
+    }
+    pglBindRenderbuffer(GL_RENDERBUFFER, target->depthBuffer);
+    pglRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+    pglBindRenderbuffer(GL_RENDERBUFFER, 0);
+
     pglGenFramebuffers(1, &target->framebuffer);
     if (target->framebuffer == 0) {
         fprintf(stderr, "glGenFramebuffers Error\n");
@@ -301,6 +385,8 @@ bool glCreateRenderTarget(GLRenderTarget *target, int width, int height) {
     pglBindFramebuffer(GL_FRAMEBUFFER, target->framebuffer);
     pglFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
         GL_TEXTURE_2D, target->texture, 0);
+    pglFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+        GL_RENDERBUFFER, target->depthBuffer);
     GLenum status = pglCheckFramebufferStatus(GL_FRAMEBUFFER);
     pglBindFramebuffer(GL_FRAMEBUFFER, 0);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
@@ -321,11 +407,27 @@ void glDestroyRenderTarget(GLRenderTarget *target) {
     if (target->texture != 0) {
         glDeleteTextures(1, &target->texture);
     }
+    if (target->depthBuffer != 0 && pglDeleteRenderbuffers != NULL) {
+        pglDeleteRenderbuffers(1, &target->depthBuffer);
+    }
     memset(target, 0, sizeof(*target));
 }
 
 void glSet2DProjection(int width, int height) {
     glSetLogicalProjection(width, height, width, height);
+}
+
+GLfloat glDepthZFromDistance(double distance) {
+    const double nearPlane = 0.05;
+    const double farPlane = 100.0;
+    if (distance < nearPlane) {
+        distance = nearPlane;
+    } else if (distance > farPlane) {
+        distance = farPlane;
+    }
+    double depth = farPlane / (farPlane - nearPlane)
+        - (farPlane * nearPlane) / ((farPlane - nearPlane) * distance);
+    return (GLfloat)(1.0 - 2.0 * depth);
 }
 
 void glSetLogicalProjection(int viewportWidth, int viewportHeight,
@@ -353,7 +455,8 @@ void glBeginRenderTarget(const GLRenderTarget *target) {
     pglBindFramebuffer(GL_FRAMEBUFFER, target->framebuffer);
     glSet2DProjection(target->width, target->height);
     glClearColor(42.0f / 255.0f, 48.0f / 255.0f, 68.0f / 255.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glDepthMask(GL_TRUE);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 void glDrawFloor(GLuint texture, double playerX, double playerY,

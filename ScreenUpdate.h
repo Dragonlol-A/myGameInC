@@ -5,6 +5,7 @@
 #include "gl_renderer.h"
 #include "player.h"
 #include "enemy.h"
+#include "model.h"
 
 #define SCREEN_WIDTH 1920
 #define SCREEN_HEIGHT 1080
@@ -13,7 +14,8 @@ void getRenderResolution(int *width, int *height);
 
 bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTexture,
     const Enemy *enemy, int textureWidth, int textureHeight,
-    int renderWidth, int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH]);
+    int renderWidth, int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH],
+    const ModelInstance *model);
 
 int openMenu(SDL_Window *window, GLuint settingsButtonTexture);
 

@@ -385,11 +385,13 @@ typedef struct {
     int sourceEnd;
     Uint8 shade;
     int material;
+    double distance;
 } WallColumn;
 
 bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTexture,
     const Enemy *enemy, int textureWidth, int textureHeight, int renderWidth,
-    int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH]) {
+    int renderHeight, const int map[MAP_HEIGHT][MAP_WIDTH],
+    const ModelInstance *model) {
     if (renderWidth <= 0 || renderHeight <= 0) {
         fprintf(stderr, "Renderer output size is invalid: %d x %d\n", renderWidth, renderHeight);
         return false;
@@ -407,6 +409,8 @@ bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTex
     double cameraOffsetY = player->cameraBob * renderHeight;
     glDrawFloor(wallTexture, player->x, player->y, player->dirX, player->dirY,
         player->planeX, player->planeY, cameraOffsetY, renderWidth, renderHeight);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
 
     for (int x = 0; x < renderWidth; x++) {
         zBuffer[x] = INFINITY;
@@ -521,7 +525,7 @@ bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTex
         if (map[mapY][mapX] == 1 || map[mapY][mapX] == 2) {
             wallColumns[x] = (WallColumn){
                 x, drawStart, drawEnd, textureX, sourceStart, sourceEnd,
-                shade, map[mapY][mapX]
+                shade, map[mapY][mapX], perpendicularDistance
             };
         }
     }
@@ -542,15 +546,23 @@ bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTex
             float textureV1 = (float)column->sourceEnd / textureHeight;
             glColor4ub(column->shade, column->shade, column->shade, 255);
             glTexCoord2f(textureU, textureV0);
-            glVertex2f((float)column->x, (float)column->drawStart);
+            glVertex3f((float)column->x, (float)column->drawStart,
+                glDepthZFromDistance(column->distance));
             glTexCoord2f(textureU, textureV0);
-            glVertex2f((float)(column->x + 1), (float)column->drawStart);
+            glVertex3f((float)(column->x + 1), (float)column->drawStart,
+                glDepthZFromDistance(column->distance));
             glTexCoord2f(textureU, textureV1);
-            glVertex2f((float)(column->x + 1), (float)column->drawEnd);
+            glVertex3f((float)(column->x + 1), (float)column->drawEnd,
+                glDepthZFromDistance(column->distance));
             glTexCoord2f(textureU, textureV1);
-            glVertex2f((float)column->x, (float)column->drawEnd);
+            glVertex3f((float)column->x, (float)column->drawEnd,
+                glDepthZFromDistance(column->distance));
         }
         glEnd();
+    }
+
+    if (model != NULL) {
+        modelDraw(model, player, renderWidth, renderHeight, cameraOffsetY);
     }
 
     double relativeX = enemy->x - player->x;
@@ -581,28 +593,35 @@ bool renderScene(const Player *player, GLuint wallTexture, GLuint theBestWallTex
             glEnable(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, enemy->texture);
             glColor4ub(255, 255, 255, 255);
+            glDepthMask(GL_FALSE);
             glBegin(GL_QUADS);
             for (int stripeX = firstX; stripeX < endX; stripeX++) {
                 if (transformY < zBuffer[stripeX]) {
                     float textureX0 = (float)(stripeX - spriteLeft) / spriteWidth;
                     float textureX1 = (float)(stripeX + 1 - spriteLeft) / spriteWidth;
                     glTexCoord2f(textureX0, 0.0f);
-                    glVertex2f((float)stripeX, (float)spriteTop);
+                    glVertex3f((float)stripeX, (float)spriteTop,
+                        glDepthZFromDistance(transformY));
                     glTexCoord2f(textureX1, 0.0f);
-                    glVertex2f((float)(stripeX + 1), (float)spriteTop);
+                    glVertex3f((float)(stripeX + 1), (float)spriteTop,
+                        glDepthZFromDistance(transformY));
                     glTexCoord2f(textureX1, 1.0f);
-                    glVertex2f((float)(stripeX + 1), (float)(spriteTop + spriteHeight));
+                    glVertex3f((float)(stripeX + 1), (float)(spriteTop + spriteHeight),
+                        glDepthZFromDistance(transformY));
                     glTexCoord2f(textureX0, 1.0f);
-                    glVertex2f((float)stripeX, (float)(spriteTop + spriteHeight));
+                    glVertex3f((float)stripeX, (float)(spriteTop + spriteHeight),
+                        glDepthZFromDistance(transformY));
                 }
             }
             glEnd();
+            glDepthMask(GL_TRUE);
         }
     }
 
     free(zBuffer);
     free(wallColumns);
     glDisable(GL_TEXTURE_2D);
+    glDisable(GL_DEPTH_TEST);
     glColor4ub(255, 255, 255, 255);
     return true;
 }

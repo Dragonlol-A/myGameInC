@@ -1,0 +1,38 @@
+Array and OBJ parsing helpers:
+
+reserveArray — Grows a dynamically allocated array when it needs more capacity. It usually doubles the capacity, uses realloc, and returns false if allocation or size checks fail.
+appendVec3 — Adds one Vec3—used for OBJ positions and normals—to a growable array.
+appendVertex — Adds one ModelVertex to the model’s vertex array.
+appendIndex — Adds one index to the model’s index array. It rejects values too large to fit in OpenGL’s GLuint index type.
+resolveIndex — Converts an OBJ index into a zero-based array index. OBJ positive indices start at 1; negative indices count backward from the current end. Index 0 and out-of-range values are rejected.
+parseFaceVertex — Reads one corner of an OBJ face, such as position/uv/normal. It extracts the position and optional normal indices. It ignores the UV index, so this OBJ loader does not import OBJ texture coordinates.
+subtract — Returns vector a - b; used when calculating a face normal.
+cross — Returns the cross product of two vectors; used to find a triangle’s perpendicular direction.
+normalized — Scales a vector to length 1. If its length is nearly zero, it returns an upward-facing fallback normal.
+appendFaceTriangle — Converts three OBJ face corners into a triangle. It uses the supplied vertex normals if available; otherwise, it calculates one face normal. It appends three vertices and a matching index for each. The vertices are not shared with other triangles.
+appendFace — Parses all corners on one OBJ f line. It splits polygons into triangles using a fan from the first corner—for example, a quad becomes two triangles—and fails if the face is malformed.
+
+Model setup and loading:
+
+modelDestroy — Deletes the model’s OpenGL textures, frees its vertex, index, batch, and render-cache arrays, then zeroes the structure.
+modelPrepareRenderCache — Checks that the model and its material batches are valid, then allocates reusable CPU-side buffers for projected vertices and filtered indices. It does not create GPU buffers.
+objModelLoad — Loads a basic OBJ file. It reads positions (v), normals (vn), and faces (f); ignores other OBJ records; computes the model’s bounds and center; and assigns one default material and batch. It builds into a temporary model and replaces the destination only on success.
+modelLoad — Chooses a loader based on the filename extension: .gltf and .glb go to gltfModelLoad in gltf_model.c; other files go to objModelLoad.
+
+Projection and drawing:
+
+projectVertex — Transforms one model-space vertex into screen X/Y and depth. It applies the model’s center, world position, and scale, then the player’s camera transform. It returns false if the vertex is too close or too far from the camera.
+
+modelDraw — Draws one model instance:
+
+        Checks the model, camera, scale, and render dimensions.
+        Projects each model vertex once and calculates simple directional lighting.
+        For each material batch, filters out triangles with any vertex marked invisible.
+        Sets the batch’s material color and texture, then draws its remaining indices with glDrawElements.
+
+Disables the client arrays and texture/alpha-test state it enabled.
+The visibility check drops a whole triangle if any one of its vertices is outside the camera’s distance range; it does not clip triangles against that range. Also, for materials marked alphaBlend, this function disables depth writes, but it does not itself enable GL_BLEND.
+
+
+
+[made by copilot]

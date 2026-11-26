@@ -64,9 +64,7 @@ static bool appendVertex(ObjModel *model, size_t *capacity, ModelVertex vertex) 
 }
 
 static bool appendIndex(Model *model, size_t *capacity, size_t index) {
-    if (index > UINT_MAX || model->indexCount == (size_t)-1
-        || !reserveArray((void **)&model->indices, capacity,
-            model->indexCount + 1, sizeof(*model->indices))) {
+    if (index > UINT_MAX || model->indexCount == (size_t)-1 || !reserveArray((void **)&model->indices, capacity, model->indexCount + 1, sizeof(*model->indices))) {
         return false;
     }
     model->indices[model->indexCount++] = (GLuint)index;
@@ -77,8 +75,7 @@ static bool resolveIndex(const char *text, size_t count, size_t *index) {
     errno = 0;
     char *end = NULL;
     long rawIndex = strtol(text, &end, 10);
-    if (text == end || *end != '\0' || errno == ERANGE
-        || rawIndex == 0 || rawIndex > INT_MAX || rawIndex < INT_MIN) {
+    if (text == end || *end != '\0' || errno == ERANGE || rawIndex == 0 || rawIndex > INT_MAX || rawIndex < INT_MIN) {
         return false;
     }
 
@@ -142,15 +139,13 @@ static bool appendFaceTriangle(ObjModel *model, size_t *vertexCapacity,
 
     for (size_t i = 0; i < 3; i++) {
         Vec3 position = positions[corners[i]->position];
-        Vec3 normal = corners[i]->hasNormal
-            ? normalized(normals[corners[i]->normal]) : faceNormal;
+        Vec3 normal = corners[i]->hasNormal ? normalized(normals[corners[i]->normal]) : faceNormal;
         size_t index = model->vertexCount;
         ModelVertex vertex = {
             position.x, position.y, position.z,
             normal.x, normal.y, normal.z, 0.0f, 0.0f
         };
-        if (!appendVertex(model, vertexCapacity, vertex)
-            || !appendIndex(model, indexCapacity, index)) {
+        if (!appendVertex(model, vertexCapacity, vertex) || !appendIndex(model, indexCapacity, index)) {
             return false;
         }
     }
@@ -171,9 +166,7 @@ static bool appendFace(ObjModel *model, size_t *vertexCapacity,
             break;
         }
         FaceVertex vertex;
-        if (!parseFaceVertex(token, positionCount, normalCount, &vertex)
-            || !reserveArray((void **)&face, &faceCapacity,
-                faceCount + 1, sizeof(*face))) {
+        if (!parseFaceVertex(token, positionCount, normalCount, &vertex) || !reserveArray((void **)&face, &faceCapacity, faceCount + 1, sizeof(*face))) {
             valid = false;
             break;
         }
